@@ -23,6 +23,12 @@ two-in-one boutique pedals that inspired this project.
 This project is under active development. See `CLAUDE.md` and
 `.claude/rules/` for the current build plan and implementation notes.
 
+## Built With
+
+- [JUCE](https://juce.com) — audio plugin framework
+- [chowdsp_wdf](https://github.com/Chowdhury-DSP/chowdsp_wdf) — wave digital
+  filter library used for the circuit-inspired DSP modelling
+
 ## Building
 
 ```bash
@@ -37,6 +43,13 @@ cmake --build build --target Monarch_VST3
 ```
 
 Requires CMake 3.15+, C++17, and macOS 10.13+.
+
+## License
+
+This project is licensed under the [GNU Affero General Public License v3.0](LICENSE)
+(AGPLv3), the same license under which the open-source edition of JUCE is
+distributed. chowdsp_wdf (BSD-3-Clause) is compatible and included under its
+own license terms in `libs/chowdsp_wdf`.
 
 ## Author
 
