@@ -54,3 +54,16 @@ target_link_libraries(Monarch
         juce::juce_recommended_lto_flags
         juce::juce_recommended_warning_flags
 )
+
+add_executable(SmokeTest_RC tests/SmokeTest_RC.cpp)
+
+target_link_libraries(SmokeTest_RC
+    PRIVATE
+        xsimd::xsimd
+        chowdsp::chowdsp_wdf
+)
+
+target_compile_options(SmokeTest_RC
+    PRIVATE
+        -Wall -Wextra
+)

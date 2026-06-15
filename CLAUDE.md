@@ -51,10 +51,10 @@ clang-format -i src/**/*.{cpp,h}
 
 ## Repository State
 
-> **CURRENT: Step 3 — chowdsp_wdf smoke test**
+> **CURRENT: Step 4 — Stage-by-stage DSP**
 
-The `.claude/` rules and agents are complete. The Step 2 JUCE CMake scaffold is in place
-under `src/`, `CMakeLists.txt`, `.clang-format`, and `.clang-tidy`.
+The `.claude/` rules and agents are complete. The Step 2 JUCE CMake scaffold and Step 3
+chowdsp_wdf smoke test are both in place and verified.
 
 ---
 
@@ -64,10 +64,10 @@ under `src/`, `CMakeLists.txt`, `.clang-format`, and `.clang-tidy`.
 2. ✅ **JUCE CMake scaffold** — complete. CMakeLists.txt, PluginProcessor, PluginEditor, full
    APVTS parameter layout, MonarchChannel stub, and TaperUtils all in place. AU validated
    with `auval` and all 18 parameters confirmed present with correct defaults.
-3. **chowdsp_wdf smoke test** ← CURRENT STEP
-   - Implement a trivial RC lowpass using `chowdsp::wdft`, verify -3dB point matches theory
-   - Gate: correct -3dB point confirmed
-4. **Stage-by-stage DSP** — implement and validate each before moving on:
+3. ✅ **chowdsp_wdf smoke test** — complete. `tests/SmokeTest_RC.cpp` implements a 1kHz RC
+   lowpass via `chowdsp::wdft` (double precision); measured -3.018 dB at the theoretical
+   -3dB corner, confirmed PASS.
+4. **Stage-by-stage DSP** ← CURRENT STEP — implement and validate each before moving on:
    - `InputFilter` — HPF corner ~590 Hz (C3=10nF, R8=27k)
    - `Stage1` (IC_A, non-inverting) — gain peak ~4194 Hz at mid-DRIVE
    - `Stage1` Hi Gain (SW-3) — +4 dB gain range shift (R8_eff=12.17k vs 27k)
