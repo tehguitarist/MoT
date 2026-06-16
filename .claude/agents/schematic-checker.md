@@ -24,16 +24,28 @@ You have read-only access. Do not write code or modify files.
 - Stage 1 (IC_A): **non-inverting** amplifier. Signal at pin 3 (+). No PolarityInverterT.
 - Stage 2 (IC_B): **inverting** amplifier. Signal at pin 6 (–). PolarityInverterT IS required.
 - Stage 2 DC gain: –R10/R9 = –220k/10k = **–22** (matsumin refs: R10=220k feedback, R9=10k input)
-- DRIVE pot: 100kB linear — wired as voltage divider; increases both Stage 1 and Stage 2 gain together
+- DRIVE pot: 100kB linear — 2-terminal rheostat (R6+DRIVE) entirely inside Stage 1's
+  feedback network (Z_upper). No separate wiper tap to Stage 2; Stage 2 is unaffected by DRIVE.
 
 **Clipping:**
-- SW-1 soft-clip: MA856×4 (two DiodePairT in parallel) in feedback loop (IC_B pin 7 ↔ pin 6), parallel with R10 (220k)
-- SW-2 hard-clip: 1S1588×2 (one DiodePairT) shunt from node_HC to BIAS; R11 (6.8k) always in series between IC_B pin 7 and node_HC
+- SW-1 soft-clip: `[D4+D5]∥[D2+D3]` — two back-to-back 2-diode MA856 series strings,
+  opposite polarity. Electrically ≡ **ONE** `DiodePairT` with `n_eff = 2×n_MA856 ≈ 3.024`
+  (two diodes in series ≡ one diode with n doubled). This network is in series with
+  R11(6.8k); the R11+diode branch sits in `WDFParallelT` with R10(220k) at IC_B's feedback
+  node (pin 6– ↔ pin 7), gated by SW-1. Effective threshold ≈ 2×Vf_MA856 ≈ 1.64V.
+- SW-2 hard-clip: 1S1588×2, **true antiparallel pair** (one DiodePairT), shunt from
+  node_HC to BIAS, gated by SW-2. R12 (1k) — NOT R11 — is always in series between IC_B
+  pin 7 (output) and node_HC, in every clipping mode.
 - Both stages use **symmetric** matched-species pairs — `DiodePairT`, not `DiodeT`
 - MA856 Vf ~0.82V; **Is = 7.74e-13, n = 1.512** (validated from Panasonic datasheet)
 - 1S1588 = 1N914 = 1N4148 electrically; Is = 2.52e-9, n = 1.752
 
-**Tone stage:** Fully passive RC — **no diodes**. R12(1k) + TONE(25kB) + C8(10nF) + R13(6.8k) + Trim(50kB) + C9(10nF). Linear WDF tree. (matsumin refs)
+**Tone stage:** Fully passive RC — **no diodes**. TONE (25kB) is a **3-terminal pot tap**:
+top terminal = node_HC (fed by R12 from Stage 2 output), bottom terminal → C8(10nF) →
+BIAS, wiper → R13(6.8k) → node_T_out. From node_T_out: Trim(50kB, 2-terminal rheostat
+like DRIVE) → C9(10nF) → BIAS (presence bypass), and VOL(100kA) top terminal. Modelled as
+an R-type adaptor at the TONE wiper (R_a toward node_HC, R_b+C8 toward BIAS, R13 toward
+node_T_out). NOT two parallel 2-terminal branches. (matsumin refs)
 
 **Pots:** DRIVE = 100kB **linear**, TONE = 25kB **linear**, VOL = 100kA **audio**, PRESENCE = 50kB **linear**
 

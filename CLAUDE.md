@@ -72,15 +72,22 @@ chowdsp_wdf smoke test are both in place and verified.
      (Z_lower = (R7+C5)∥(R8+C6), Z_upper = C4∥(R6+DRIVE)); verify Av(s) shape and gain peak
      near ~4194 Hz at mid-DRIVE (re-measure exact value from the implemented model — see
      circuit.md Section 6)
-   - `Stage1` Hi Gain (SW-3) — +4 dB gain range shift (Z_lower Branch2: R8_eff≈12.17k vs R8=27k)
-   - `Stage2` (IC_B, inverting) — DC gain –22, HPF 159 Hz (C7=100nF, R9=10k)
-   - `SW1SoftClip` (MA856×4 ∥ R10) — symmetric clipping, Vf ~0.82V onset
-   - `SW2HardClip` (1S1588×2 shunt via R11) — symmetric clipping, Vf ~0.584V onset
+   - `Stage1` Hi Gain (SW-3) — ⚠️ **topology under revision** (Theseus trace 2026-06-16):
+     actual element is SW1B switching R3=1k in the Stage-1 DRIVE feedback, NOT the old
+     R29∥R8 Z_lower model (R29/R27 are power-supply, not gain stage). Confirm exact wiring
+     before implementing — see circuit.md Section 6.
+   - `Stage2` (IC_B, inverting) — DC gain –22, HPF 159 Hz (C7=100nF, R9=10k); feedback =
+     R10(220k) ∥ (SW-1 branch, see below)
+   - `SW1SoftClip` — `[D4+D5]∥[D2+D3]` back-to-back MA856 series strings ≡ ONE `DiodePairT`
+     with n_eff=2×n_MA856≈3.024, in series with R11(6.8k), branch ∥ R10; effective
+     threshold ≈1.64V
+   - `SW2HardClip` (1S1588×2 true antiparallel, shunt at node_HC via always-present R12=1k)
+     — symmetric clipping, Vf ~0.584V onset
    - **Run `dsp-validator` after each stage. Do not proceed on FAIL.**
 5. **All 8 clipping modes** per channel — Boost/OD/Dist/Both × Standard/HiGain
-6. **Tone stage** — passive RC treble-cut + Presence network
-   - ⚠️ **Run `schematic-checker` first** — exact wiring of C8/C9/R13/Trim needs
-     node-level verification from `king_of_tone_schematic.png` before coding
+6. **Tone stage** — passive RC; TONE is a 3-terminal pot tap (R-type adaptor at the
+   wiper: R_a toward node_HC, R_b+C8 toward BIAS, R13 toward node_T_out/Presence/VOL) —
+   topology fully resolved, see circuit.md Section 11
 7. **Oversampling + ADAA** on both clipping stages — verify aliasing reduction
 8. **Dual-channel integration** — channels A→B in series, independent bypass and Hi Gain
 9. **UI implementation** — both channel panels, Hi Gain toggles, oversampling controls
@@ -97,16 +104,16 @@ chowdsp_wdf smoke test are both in place and verified.
 | Stage 2 (IC_B) | **Inverting** — `PolarityInverterT` required |
 | Stage 2 DC gain | –22 (R10=220k feedback / R9=10k input) |
 | Stage 2 HPF | 159 Hz (C7=100nF, R9=10k) |
-| Soft-clip diodes SW-1 | MA856 ×4; two `DiodePairT` in ∥ with R10; Is=7.74e-13, n=1.512 |
-| Hard-clip diodes SW-2 | 1S1588 ×2; one `DiodePairT` shunt via R11=6.8k; Is=2.52e-9, n=1.752 |
+| Soft-clip diodes SW-1 | MA856 ×4 as `[D4+D5]∥[D2+D3]` back-to-back series strings ≡ ONE `DiodePairT` with n_eff=2×1.512≈3.024, Is=7.74e-13; in series with R11=6.8k, branch ∥ R10=220k, gated by SW-1 |
+| Hard-clip diodes SW-2 | 1S1588 ×2 true antiparallel pair; one `DiodePairT` shunt at node_HC, fed via R12=1k (always-present Stage 2 output R); Is=2.52e-9, n=1.752 |
 | Diode topology | **Symmetric pairs** — `DiodePairT` only, never `DiodeT` |
-| Hi Gain SW-3 | R29=22k ∥ R8=27k → R8_eff≈12.17k in Z_lower Branch2; Stage 1 +4 dB gain shift |
+| Hi Gain SW-3 | ⚠️ **UNDER REVISION** — Theseus trace shows R29/R27 are power-supply (LED/VCC-filter), NOT gain stage. Actual element = SW1B switching R3=1k in Stage-1 DRIVE feedback; exact wiring TBC. See circuit.md Section 6. Do not implement the old R29∥R8 model. |
 | Stage 1 feedback | Z_lower=(R7+C5)∥(R8+C6); Z_upper=C4∥(R6+DRIVE 0-100k); Av(s)=1+Zupper/Zlower |
 | DRIVE taper | 100kB **linear**; 2-terminal rheostat inside Stage 1 Z_upper only |
-| TONE taper | 25kB **linear** |
+| TONE taper | 25kB **linear**; 3-terminal pot tap (R-type adaptor at wiper) — see circuit.md Section 11 |
 | VOL taper | 100kA **audio** (`pow(10, 2x-2)`) |
-| Presence taper | 50kB **linear**; default fully CCW |
-| Tone stage | Passive RC only — no diodes |
+| Presence taper | 50kB **linear**; default fully CCW; 2-terminal rheostat (like DRIVE) from node_T_out |
+| Tone stage | Passive RC only — no diodes; 3-terminal TONE pot tap, not two parallel branches |
 | Channel routing | A → B in series; independently bypassable |
 | Default mode | Overdrive (SW-1 ON, SW-2 OFF, SW-3 OFF) |
 | Gain peak | ~4194 Hz at mid-DRIVE (re-measure from corrected Stage 1 model) |

@@ -68,13 +68,23 @@ wdft::DiodePairT<double, decltype(next), wdft::DiodeQuality::Best> dp { next, Is
 
 **Do NOT use separate `DiodeT` instances for each polarity.** Both stages use symmetric `DiodePairT` pairs.
 
-### SW-1 Soft-Clip Configuration (two pairs in parallel)
-The feedback loop has TWO antiparallel MA856 pairs in parallel (D2+D3 ∥ D4+D5). Model as two `DiodePairT` instances in a WDF parallel adaptor. Both pairs have identical MA856 parameters. Having two pairs in parallel lowers effective clipping onset slightly — do not simplify to one pair.
+### SW-1 Soft-Clip Configuration (CORRECTED 2026-06-16)
+The SW-1 feedback branch is `[D4 series D5] ∥ [D2 series D3]` (back-to-back, opposite
+polarity MA856 pairs), in series with R11 (6.8k), this combination in parallel with R10
+(220k). Two identical diodes in series are electrically equivalent to ONE diode with the
+same `Is` and `n` doubled (`n_eff = 2×n_MA856 ≈ 3.024`). Model the entire diode network as
+**a single** `DiodePairT` with `n_eff`, in series with R11, in `WDFParallelT` with R10.
+Do NOT instantiate two `DiodePairT`s — that models two independent antiparallel pairs,
+which is not the actual topology.
 
 ```cpp
-wdft::DiodePairT<double, decltype(next), wdft::DiodeQuality::Best> dp1 { next, Is_MA856, Vt, n_MA856 };
-wdft::DiodePairT<double, decltype(next), wdft::DiodeQuality::Best> dp2 { next, Is_MA856, Vt, n_MA856 };
-wdft::WDFParallelT<double, decltype(dp1), decltype(dp2)> diodePairs { dp1, dp2 };
+constexpr double n_eff_MA856 = 2.0 * n_MA856; // ≈ 3.024
+
+wdft::DiodePairT<double, decltype(next), wdft::DiodeQuality::Best> dp { next, Is_MA856, Vt, n_eff_MA856 };
+wdft::ResistorT<double> r11 { 6.8e3 };
+wdft::WDFSeriesT<double, decltype(r11), decltype(dp)> sw1Branch { r11, dp };
+// sw1Branch goes in WDFParallelT with R10 (220k) at IC_B's feedback R-type adaptor.
+// SW-1 OFF: precomputed matrix with R10 only (sw1Branch removed from the matrix).
 ```
 
 ### Voltage Readout
@@ -134,25 +144,24 @@ Each channel has independent APVTS parameters (e.g., `drive_a`, `drive_b`, `tone
 
 ## Hi Gain Mod — Stage 1 Scattering Matrix Switch
 
-> **CORRECTED 2026-06-15** — see circuit.md Section 6. R8 is part of Stage 1's Z_lower
-> Branch2 (R8 + C6 in series, NodeF to GND), not a direct feedback resistor to BIAS.
+> **⚠️ UNDER REVISION 2026-06-16 — DO NOT IMPLEMENT THE CODE BELOW YET.** A hi-res trace of
+> the Theseus schematic (page 28) shows the previous "R29(22k) ∥ R8(27k) in Z_lower Branch2"
+> model is **wrong**. In Theseus, R29/R30(22k) are bypass-LED current-limit resistors and
+> R27/R28(47R) are VCC supply-filter resistors — both in the **power supply**, not the gain
+> stage. The actual Hi-Gain element is **DIP switch SW1B switching R3(1k)** in the Stage-1
+> **DRIVE/feedback (Z_upper)** network (Theseus manual: Hi Gain "shifts the gain range of the
+> drive knob"). Exact wiring is not yet pinned, and matsumin (primary source) lacks the mod
+> entirely. See circuit.md Section 6 for the full discrepancy note. **Confirm the corrected
+> topology before writing Stage-1 Hi-Gain code.** The mechanism (precomputed scattering
+> matrices switched via `setSMatrixData()`, no tree reconstruction, Stage 1 linear) is
+> unchanged regardless of which element ends up being correct.
 
-SW-3 (Hi Gain) switches R29 (22k) in parallel with R8 (27k) within Stage 1's Z_lower
-Branch2 (R8 + C6 series). Stage 1 is linear — no NR, no oversampling involved. Only the
-Stage 1 R-type scattering matrix changes (Branch2's resistor value).
-
+**Superseded prior code (DO NOT USE — based on the wrong R29∥R8 model):**
 ```cpp
-// Hi Gain OFF: R8 = 27k (standard Branch2 resistor, in series with C6)
-constexpr double R8_standard = 27.0e3;
-
-// Hi Gain ON: R8 ∥ R29, plus R27 (47Ω protection) in series in the switch leg
-// R8_eff = (27k ∥ 22k) + 47Ω ≈ 12168 Ω
-constexpr double R8_hi_gain = (27.0e3 * 22.0e3) / (27.0e3 + 22.0e3) + 47.0; // ≈ 12168 Ω
+// WRONG per Theseus trace — kept only to show what was corrected.
+// constexpr double R8_standard = 27.0e3;
+// constexpr double R8_hi_gain = (27.0e3 * 22.0e3) / (27.0e3 + 22.0e3) + 47.0; // ≈ 12168 Ω
 ```
-
-Precompute two Stage 1 scattering matrices in `prepareToPlay`:
-1. **Standard** (Hi Gain OFF): Z_lower Branch2 = R8 (27k) + C6 in series
-2. **Hi Gain** (Hi Gain ON): Z_lower Branch2 = R8_eff (≈12168 Ω) + C6 in series
 
 Switch at block start via `setSMatrixData()` when `pendingHiGainA/B` changes. No tree reconstruction.
 
@@ -189,15 +198,15 @@ See `circuit.md` for full table with schematic reference designators. Key values
 - C4 = 100pF (Stage 1 Z_upper: NodeF↔NodeG, parallel with R6+DRIVE)
 - R6 = 10k, DRIVE = 100kB (Stage 1 Z_upper: NodeF↔NodeG, series, in parallel with C4)
 - R9 = 10k (Stage 2 input resistor; Av = –R10/R9 = –22)
-- R10 = 220k (Stage 2 feedback resistor)
-- R11 = 6.8k (hard-clip shunt series R; always in signal path)
-- R12 = 1k (Tone stage series R)
-- R13 = 6.8k (Presence network series R)
+- R10 = 220k (Stage 2 feedback resistor; always present)
+- R11 = 6.8k (SW-1 feedback branch series R, with diode network; branch ∥ R10, gated by SW-1)
+- R12 = 1k (Stage 2 output series R; always present; feeds node_HC / TONE pot top terminal)
+- R13 = 6.8k (TONE pot wiper → node_T_out)
 - R14 = 1M (output bleed)
 - C7 = **100nF** (Stage 2 input coupling; confirmed from BOTH schematics)
-- C8, C9 = 10nF (tone stage caps)
+- C8 = 10nF (TONE pot bottom terminal → BIAS); C9 = 10nF (Trim → C9 → BIAS, presence path)
 - C11 = 1µF (output coupling)
-- TONE = 25kB, VOL = 100kA, Trim = 50kB
+- TONE = 25kB (3-terminal pot tap, R-type adaptor), VOL = 100kA, Trim = 50kB (2-terminal rheostat)
 
 ## Signal Calibration
 

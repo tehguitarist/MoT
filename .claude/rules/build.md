@@ -33,9 +33,10 @@ monarch-pedal/
 │   │   ├── Stage1.h                 ← IC_A non-inverting amp incl. input network (C3/R4/R5)
 │   │   │                              and feedback R-type at pin 2 (linear WDF)
 │   │   ├── Stage2.h                 ← IC_B inverting amp; R-type at pin 2 (linear WDF)
-│   │   ├── SW1SoftClip.h            ← MA856×4 in parallel with R10 (nonlinear WDF)
-│   │   ├── SW2HardClip.h            ← 1S1588×2 shunt via R11 (nonlinear WDF)
-│   │   ├── ToneStage.h              ← R12/TONE/C8/R13/Trim/C9 passive RC (linear WDF)
+│   │   ├── SW1SoftClip.h            ← MA856 back-to-back pairs (1x DiodePairT, n_eff=2n)
+│   │   │                              + R11, in parallel with R10 (nonlinear WDF)
+│   │   ├── SW2HardClip.h            ← 1S1588×2 true antiparallel shunt via R12 (nonlinear WDF)
+│   │   ├── ToneStage.h              ← TONE 3-terminal pot tap (R-type) + C8/R13/Trim/C9 (linear WDF)
 │   │   └── MonarchDSP.h             ← top-level dual-channel wrapper
 │   ├── ui/
 │   │   ├── MonarchLookAndFeel.h / .cpp
@@ -131,8 +132,10 @@ WarningsAsErrors: ""
   measure and record the actual peak frequency/gain from the implemented model)
 - Step 4b: Stage 1 Hi Gain — verify gain increase (~+4 dB target) vs standard mode
 - Step 4c: Stage 2 — DC gain = ×22 inverting (R10/R9 = 220k/10k); HPF corner **159 Hz** (C7=100nF, R9=10k)
-- Step 5a: SW-1 soft-clip — symmetric sine clipping; onset ~0.82V (MA856 Vf @ ~3.7µA through R10)
-- Step 5b: SW-2 hard-clip — symmetric sine clipping; onset ~0.584V (1S1588 Vf); harder knee than SW-1
+- Step 5a: SW-1 soft-clip — symmetric sine clipping; onset ≈1.64V (2×Vf_MA856, via the
+  back-to-back series-string diode network in series with R11, ∥ R10)
+- Step 5b: SW-2 hard-clip — symmetric sine clipping; onset ~0.584V (1S1588 Vf, true
+  antiparallel pair shunting node_HC via always-present R12); harder knee than SW-1
 - Step 6: All 8 mode combinations verified per channel (Boost/OD/Dist/Both × standard/HiGain)
 - Step 7: Both channels in series — verify gain stacking, independent bypass, clipping interactions
 - Step 8: Oversampling — confirm 4x live / 8x render split; bypassed channel skips oversampler
