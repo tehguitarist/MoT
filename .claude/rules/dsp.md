@@ -22,7 +22,22 @@
 Every `CapacitorT` must have `.prepare(sampleRate)` called in `prepareToPlay`. Missing this produces silence or wrong behaviour. Call on every cap in every WDF stage in both channels. Also reset both oversamplers.
 
 ### Stage 2 Polarity Inversion
-Stage 2 (IC_B) is an **inverting** amplifier. `PolarityInverterT` IS required between the R-type adaptor and the ideal voltage source for Stage 2. Omitting it produces inverted polarity from Stage 2. Stage 1 (IC_A, non-inverting) does NOT need a polarity inverter.
+Stage 2 (IC_B) is an **inverting** amplifier — its output MUST be inverted (passband gain
+**−22**, validated by a negative signed gain in `tests/Stage2_Gain.cpp`).
+
+**How the inversion is realized (VCVS-root-R-type approach, as implemented):** the op-amp is
+a VCVS inside the root R-type adaptor, and its terminal assignment carries the inversion —
+`in+ = BIAS, in− = pin6(−)`, so V(out) = −A·V(pin6−). No separate `PolarityInverterT` is used
+(the same way Stage 1's non-inverting VCVS uses none). The output is read off the **passive**
+R10 feedback port (`+voltage(r10)`, since pin6− is virtual ground), which already carries the
+inverted sign. (A non-inverting VCVS assignment would be positive feedback → unstable/NaN, so
+a passing −22 gain proves the inversion is physical, not a forced sign flip.)
+
+> The older guidance "a `PolarityInverterT` is required between the R-type and an ideal voltage
+> source" assumed a different op-amp WDF structure. With the VCVS-in-root-R-type structure used
+> here, inversion lives in the VCVS netlist. **Either is valid; the gate is the measured −22
+> inverting gain, not the presence of a specific element.** Stage 1 (non-inverting) needs no
+> inversion.
 
 ## chowdsp_wdf API Reference (key types)
 
@@ -71,24 +86,39 @@ wdft::DiodePairT<double, decltype(next), wdft::DiodeQuality::Best> dp { next, Is
 
 **Do NOT use separate `DiodeT` instances for each polarity.** Both stages use symmetric `DiodePairT` pairs.
 
-### SW-1 Soft-Clip Configuration (CORRECTED 2026-06-16)
+### SW-1 Soft-Clip Configuration (CORRECTED 2026-06-16; IMPLEMENTED 2026-06-17)
 The SW-1 feedback branch is `[D4 series D5] ∥ [D2 series D3]` (back-to-back, opposite
 polarity MA856 pairs), in series with R11 (6.8k), this combination in parallel with R10
 (220k). Two identical diodes in series are electrically equivalent to ONE diode with the
 same `Is` and `n` doubled (`n_eff = 2×n_MA856 ≈ 3.024`). Model the entire diode network as
-**a single** `DiodePairT` with `n_eff`, in series with R11, in `WDFParallelT` with R10.
-Do NOT instantiate two `DiodePairT`s — that models two independent antiparallel pairs,
-which is not the actual topology.
+**a single** `DiodePairT` with `n_eff`. Do NOT instantiate two `DiodePairT`s — that models
+two independent antiparallel pairs, which is not the actual topology.
+
+> **IMPLEMENTED via the current-source / diode-root formulation** (`src/dsp/SW1SoftClip.h`),
+> NOT a linear R-type-with-diode-port. The ideal op-amp pins pin6(−) at virtual ground, so
+> the input forces a *known* current `i_in = Vin/Z_in` (Z_in = R9 + 1/sC7) into the feedback,
+> independent of the nonlinear feedback. That current drives `R10 ∥ [R11 + diode]` with the
+> `DiodePairT` as the nonlinear ROOT — far simpler than embedding a nonlinearity in an R-type
+> scatter, and equivalent. SW-1 OFF reduces to V(pin7) = −i_in·R10 = −22·Vin (stock Stage 2).
+> Validated: symmetric soft clip, onset ≈ 1.64 V (the ~1.6 V threshold vs 0.82 V for a single
+> diode confirms `n_eff≈3.024`). **`nDiodes` (4th DiodePairT arg) scales Vt — pass `n_eff` there.**
 
 ```cpp
-constexpr double n_eff_MA856 = 2.0 * n_MA856; // ≈ 3.024
+constexpr double n_eff_MA856 = 2.0 * n_MA856; // ≈ 3.024 (passed as DiodePairT's nDiodes arg)
 
-wdft::DiodePairT<double, decltype(next), wdft::DiodeQuality::Best> dp { next, Is_MA856, Vt, n_eff_MA856 };
+// i_in‖R10 as a current source; R11 in series; DiodePair as the nonlinear root:
+wdft::ResistiveCurrentSourceT<double> iSrc { 220.0e3 };  // i_in ‖ R10
 wdft::ResistorT<double> r11 { 6.8e3 };
-wdft::WDFSeriesT<double, decltype(r11), decltype(dp)> sw1Branch { r11, dp };
-// sw1Branch goes in WDFParallelT with R10 (220k) at IC_B's feedback R-type adaptor.
-// SW-1 OFF: precomputed matrix with R10 only (sw1Branch removed from the matrix).
+wdft::WDFSeriesT<double, decltype(r11), decltype(iSrc)> fbSeries { r11, iSrc };
+wdft::DiodePairT<double, decltype(fbSeries), wdft::DiodeQuality::Best> dp { fbSeries, Is_MA856, Vt, n_eff_MA856 };
+// per sample: iSrc.setCurrent(i_in); dp.incident(fbSeries.reflected()); fbSeries.incident(dp.reflected());
+//             output V(pin7) = voltage(iSrc);   // passive read
 ```
+
+> Mode switch (SW-1 ON/OFF, later step): with this diode-root structure the switch is
+> structural (include / bypass the diode-root path), not a `setSMatrixData()` swap. The
+> `setSMatrixData` plan in architecture.md applies to the linear R-type stages, not the
+> nonlinear clip — reconcile when wiring the 8 modes.
 
 ### Voltage Readout
 ```cpp
@@ -233,6 +263,55 @@ See `circuit.md` for full table with schematic reference designators. Key values
 - Apply per stage if Stage 1 can also rail at extreme DRIVE; in practice Stage 1's gain
   (≤ ~8×) rarely rails on its own, but Stage 2 (×22) reaches the rails in Boost. Validate the
   onset in the Boost-mode test (Step 6); measure, don't assume the exact knee.
+
+## Linear-stage bilinear warping (OPEN DECISION — affects Stage 1/2/Tone peak frequencies)
+
+> **Found 2026-06-16 during Stage 1 validation.** The WDF (bilinear/trapezoidal cap model)
+> compresses high frequencies near Nyquist, shifting frequency-shaping *peaks* downward at
+> low sample rates. Measured Stage 1 peak (drive=0.5): analog **3803 Hz**, WDF **2626 Hz @
+> 48k**, **3142 Hz @ 96k**, **3476 Hz @ 192k**, **3728 Hz @ 768k** → analog as fs→∞. The
+> peak *gain* (+13.9 dB) and DC/DRIVE behaviour are correct at every rate — only the peak
+> *frequency* warps. At a 48k base rate the −1.2 kHz shift is audible. CCRMA hit the same
+> wall and **prewarped the bilinear transform to the peak (4194 Hz)**.
+
+This matters because the linear stages (Stage 1 gain shaping, Stage 2 HPF, Tone) are
+currently spec'd to run at the **base sample rate** (oversampling wraps only the clipping
+stages). Options to resolve (pick per the CPU-vs-accuracy tradeoff):
+
+1. **Oversample the linear stages too** (run the whole channel, or at least the
+   frequency-shaping WDF, at the oversampled rate). Most faithful; raises CPU. At 4×(48→192k)
+   the Stage 1 peak is 3476 Hz (−327 Hz from analog); at 8× it is ~3646 Hz.
+2. **Prewarp the WDF capacitors** to the peak region (CCRMA's approach) — cheap (no extra
+   CPU), corrects the dominant peak; needs a custom cap discretization (chowdsp `CapacitorT`
+   uses `R=1/(2·C·fs)` with no prewarp hook) and may slightly mis-place secondary features.
+3. **Accept** the warping; document it and recommend a ≥96k project rate.
+
+Until decided, the Stage 1 validation gate (Step 4a) checks the peak **gain** and DC/DRIVE
+behaviour (all correct), and records the warped peak frequency rather than failing on it.
+
+## Linear-stage accuracy at base rate — RESOLVED 2026-06-17 (was a bug, not warping)
+
+> **A large peak-frequency error first looked like bilinear warping, but it was an
+> implementation bug** in Stage 1's output reconstruction: it read the op-amp non-inverting
+> input via the *source* port (`voltage(vPlusPort)`), whose node voltage averages `Vs[n]` and
+> `Vs[n−1]` (the root scatter schedules the source's incident/reflected one sample apart).
+> That 2-point average is a spurious low-pass that drooped the HF response ~0.2 dB by 5 kHz —
+> enough to drag the very flat gain peak down ~880 Hz. **Fix: reconstruct V(NodeG) from two
+> *passive* port voltages so V(NodeF) cancels exactly — `voltage(branch1) − voltage(driveR)`.**
+
+**Lesson for every R-type stage:** when reading an output by combining port voltages, use
+**passive** ports (resistors, caps, R+C series) so shared node terms cancel in the same time
+frame. **Do not read the `ResistiveVoltageSourceT` (input) port voltage** — its `a`/`b` are a
+sample apart, giving a 2-point-average low-pass. Reconstruct node voltages from passive ports.
+
+**Result:** with the fix, the WDF matches the true bilinear transform of the analog circuit
+to within the small, expected bilinear warp — Stage 1 peak vs analog 3803 Hz: **−74 Hz @ 48k**
+(drive=0.5; worst-case −158 Hz at the broad low-DRIVE peak), **−23 Hz @ 96k**, **<12 Hz @
+192k**. So **the linear stages are accurate at the base sample rate — no oversampling or
+prewarping of the linear stages is required** for correct voicing. (Oversampling remains for
+the *clipping* stages' anti-aliasing only, per the Oversampling section.) Prewarping was
+explicitly rejected: a fixed prewarp freezes the gain peak in place across the DRIVE range
+(the analog peak sweeps ~2.8–5.0 kHz with DRIVE), so it only matches at one knob setting.
 
 ## Signal Calibration
 

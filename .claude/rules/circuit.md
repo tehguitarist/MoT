@@ -368,11 +368,19 @@ its own corner is much higher, 14.5–159 kHz). In this band:
     Av ≈ 1 + (R6 + R_drive) / (R7 ∥ R8) ≈ 1 + (R6+R_drive) / 14.85k
 
 ranging from ≈1.67× (R_drive=0) to ≈8.4× (R_drive=100k) before C4 begins to roll Z_upper
-off at higher frequencies. The exact gain-peak frequency (~4194 Hz per CCRMA, measured at
-mid-DRIVE) emerges from the interaction of the Z_lower corners (~482/590 Hz, rising) and
-the Z_upper corner (~14.5–159 kHz, falling) — **measure this from the implemented WDF model
-via a frequency-response test**, do not assume the exact peak frequency/gain numbers above
-are precise until validated.
+off at higher frequencies. The gain-peak frequency emerges from the interaction of the
+Z_lower corners (~482/590 Hz, rising) and the Z_upper corner (~14.5–159 kHz, falling).
+
+> **MEASURED & VALIDATED 2026-06-17 (implemented WDF, `tests/Stage1_FreqResponse.cpp`):**
+> - **Gain.** DC-servo shelf **−0.08 dB** (≈ unity, DC gain = 1); mid-DRIVE peak gain
+>   **+13.93 dB**; DRIVE sweep **+4.45 dB (0) → +18.22 dB (max), monotonic** — matches
+>   Av ≈ 1.67×→8.4× and confirms the corrected topology (DRIVE in Z_upper raises gain).
+> - **Peak frequency — accurate at base rate.** Analog peak (matsumin values, drive=0.5) =
+>   **3803 Hz**; WDF measures **3780 Hz @ 96k** (−23 Hz), **≈3729 Hz @ 48k** (−74 Hz) — only
+>   the small, expected bilinear warp. (An earlier ~−880 Hz error was an output-reconstruction
+>   **bug**, now fixed — see dsp.md "Linear-stage accuracy at base rate". The linear stages
+>   need **no** oversampling/prewarp for correct voicing.) CCRMA's 4194 Hz is for their
+>   reference-[9] values + drive setting (the peak is drive-dependent). Validated `dsp-validator`.
 
 **No PolarityInverterT** — Stage 1 is non-inverting.
 
@@ -792,7 +800,7 @@ Using **functional names** to avoid confusion between schematic numbering system
 | Stage 2 gain (SW-1 OFF) | –22× (26.8 dB) | Inverting |
 | SW-1 effective diode threshold | ≈1.64V (2×Vf_MA856) | `[D4+D5]∥[D2+D3]` back-to-back series strings, n_eff=2×n_MA856 |
 | Tone treble-cut corner | depends on TONE wiper position (R_a/R_b split of 25k pot) | **Measure from implemented R-type WDF model** — previous `1/(2π·R_tone·C8)` formula assumed the old two-branch topology and no longer applies directly |
-| Gain peak (two-stage system) | ~4194 Hz (CCRMA, mid-DRIVE) | **Re-measure from implemented WDF model** — not yet validated against corrected topology |
+| Stage 1 gain peak (drive=0.5) | analog **3803 Hz / +13.91 dB**; WDF **3780 Hz @ 96k / +13.93 dB** (−23 Hz; −74 Hz @ 48k) | accurate at base rate (small bilinear warp only); earlier ~−880 Hz error was an output-recon bug, fixed (dsp.md). Validated Step 4a. |
 | Output HPF (C11 + R14) | 0.16 Hz | DC block only |
 
 ---

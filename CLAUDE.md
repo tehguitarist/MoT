@@ -68,21 +68,31 @@ chowdsp_wdf smoke test are both in place and verified.
    lowpass via `chowdsp::wdft` (double precision); measured -3.018 dB at the theoretical
    -3dB corner, confirmed PASS.
 4. **Stage-by-stage DSP** ← CURRENT STEP — implement and validate each before moving on:
-   - `Stage1` (IC_A, non-inverting) — combined input network (C3/R4/R5) + feedback network
-     (Z_lower = (R7+C5)∥(R8+C6), Z_upper = C4∥(R6+DRIVE)); verify Av(s) shape and gain peak
-     near ~4194 Hz at mid-DRIVE (re-measure exact value from the implemented model — see
-     circuit.md Section 6)
+   - ✅ `Stage1` (IC_A, non-inverting) — **DONE & validated (dsp-validator PASS).** Input
+     network (C3/R4/R5 high-pass sub-filter) + root R-type op-amp gain stage (Z_lower =
+     (R7+C5)∥(R8+C6), Z_upper = C4∥(R6+DRIVE)). Scattering matrix from `tools/r_solver_sympy.py`
+     (validated sympy port of R-Solver) with ideal-op-amp limit. `tests/Stage1_FreqResponse.cpp`:
+     peak +13.93 dB @ 3780 Hz (96k; analog 3803 Hz, −23 Hz bilinear warp), DC shelf −0.08 dB,
+     DRIVE +4.45→+18.22 dB monotonic. Accurate at base rate — no oversampling/prewarp needed
+     (an output-reconstruction bug, since fixed, had caused a ~−880 Hz error). See `src/dsp/Stage1.h`.
    - `Stage1` Hi Gain (SW-3) — ⚠️ **topology under revision** (Theseus trace 2026-06-16):
      actual element is SW1B switching R3=1k in the Stage-1 DRIVE feedback, NOT the old
      R29∥R8 Z_lower model (R29/R27 are power-supply, not gain stage). Confirm exact wiring
      before implementing — see circuit.md Section 6.
-   - `Stage2` (IC_B, inverting) — DC gain –22, HPF 159 Hz (C7=100nF, R9=10k); feedback =
-     R10(220k) ∥ (SW-1 branch, see below)
-   - `SW1SoftClip` — `[D4+D5]∥[D2+D3]` back-to-back MA856 series strings ≡ ONE `DiodePairT`
-     with n_eff=2×n_MA856≈3.024, in series with R11(6.8k), branch ∥ R10; effective
-     threshold ≈1.64V
-   - `SW2HardClip` (1S1588×2 true antiparallel, shunt at node_HC via always-present R12=1k)
-     — symmetric clipping, Vf ~0.584V onset
+   - ✅ `Stage2` (IC_B, inverting) — **DONE & validated (dsp-validator PASS).** Root R-type
+     (op-amp VCVS), input C7(100nF)+R9(10k), feedback R10(220k). `tests/Stage2_Gain.cpp`:
+     passband 21.90× (−22 target), −3 dB corner 159 Hz exactly, signed gain −21 (inverting).
+     Inversion via VCVS terminals (in+=BIAS, in−=pin6−), no PolarityInverterT; output read off
+     passive R10 port. SW-1 diodes (R10 ∥ [R11+diodes]) added next. See `src/dsp/Stage2.h`.
+   - ✅ `SW1SoftClip` — **DONE & validated (dsp-validator PASS).** ONE `DiodePairT`
+     (n_eff=2×n_MA856≈3.024 via the `nDiodes` arg), R11(6.8k) series, R10 parallel.
+     Implemented as current-source/diode-root (op-amp virtual ground → known i_in drives
+     R10 ∥ [R11+diode], diode = nonlinear root). `tests/SW1SoftClip_Sine.cpp`: small-signal
+     −21.5 (inverting), perfectly symmetric, soft knee ≈1.64V (confirms n_eff). See `src/dsp/SW1SoftClip.h`.
+   - ✅ `SW2HardClip` — **DONE & validated (dsp-validator PASS).** 1S1588×2 true antiparallel
+     (ONE `DiodePairT`, n=1.752), shunt at node_HC via always-present R12=1k. Current-source...
+     no — series-R + shunt-diode-root. `tests/SW2HardClip_Sine.cpp`: gain ≈+1, symmetric, HARD
+     clamp ±0.55V (rises only to 0.66V @ 10× drive = diode log). See `src/dsp/SW2HardClip.h`.
    - **Run `dsp-validator` after each stage. Do not proceed on FAIL.**
 5. **All 8 clipping modes** per channel — Boost/OD/Dist/Both × Standard/HiGain
 6. **Tone stage** — passive RC; TONE is a 3-terminal pot tap (R-type adaptor at the
@@ -116,7 +126,7 @@ chowdsp_wdf smoke test are both in place and verified.
 | Tone stage | Passive RC only — no diodes; 3-terminal TONE pot tap, not two parallel branches |
 | Channel routing | A → B in series; independently bypassable |
 | Default mode | Overdrive (SW-1 ON, SW-2 OFF, SW-3 OFF) |
-| Gain peak | ~4194 Hz at mid-DRIVE (re-measure from corrected Stage 1 model) |
+| Gain peak | **+13.93 dB @ 3780 Hz (96k)**, analog 3803 Hz (−23 Hz; −74 Hz @ 48k). Accurate at base rate — linear stages need no oversampling/prewarp (earlier large error was an output-recon bug, fixed; see dsp.md). |
 | Oversampling live | 1x/2x/4x/8x; default **4x**; bypassed channels skip oversampler |
 | Oversampling render | 1x/2x/4x/8x; default **8x**; auto via `isNonRealtime()` |
 

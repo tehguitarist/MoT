@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.15)
 
-project(MonarchOfTone VERSION 0.1.0)
+project(MonarchOfTone VERSION 0.1.1)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -15,6 +15,7 @@ juce_add_plugin(Monarch
     BUNDLE_ID "com.leighpierce.monarchoftone"
     PLUGIN_MANUFACTURER_CODE LeP1
     PLUGIN_CODE Mon1
+    VERSION ${PROJECT_VERSION}
     FORMATS AU
     PRODUCT_NAME "Monarch of Tone"
     COPY_PLUGIN_AFTER_BUILD TRUE
@@ -64,6 +65,58 @@ target_link_libraries(SmokeTest_RC
 )
 
 target_compile_options(SmokeTest_RC
+    PRIVATE
+        -Wall -Wextra
+)
+
+add_executable(Stage1_FreqResponse tests/Stage1_FreqResponse.cpp)
+
+target_link_libraries(Stage1_FreqResponse
+    PRIVATE
+        xsimd::xsimd
+        chowdsp::chowdsp_wdf
+)
+
+target_compile_options(Stage1_FreqResponse
+    PRIVATE
+        -Wall -Wextra
+)
+
+add_executable(Stage2_Gain tests/Stage2_Gain.cpp)
+
+target_link_libraries(Stage2_Gain
+    PRIVATE
+        xsimd::xsimd
+        chowdsp::chowdsp_wdf
+)
+
+target_compile_options(Stage2_Gain
+    PRIVATE
+        -Wall -Wextra
+)
+
+add_executable(SW1SoftClip_Sine tests/SW1SoftClip_Sine.cpp)
+
+target_link_libraries(SW1SoftClip_Sine
+    PRIVATE
+        xsimd::xsimd
+        chowdsp::chowdsp_wdf
+)
+
+target_compile_options(SW1SoftClip_Sine
+    PRIVATE
+        -Wall -Wextra
+)
+
+add_executable(SW2HardClip_Sine tests/SW2HardClip_Sine.cpp)
+
+target_link_libraries(SW2HardClip_Sine
+    PRIVATE
+        xsimd::xsimd
+        chowdsp::chowdsp_wdf
+)
+
+target_compile_options(SW2HardClip_Sine
     PRIVATE
         -Wall -Wextra
 )

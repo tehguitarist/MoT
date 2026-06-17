@@ -103,8 +103,15 @@ void MonarchAudioProcessor::releaseResources()
 
 bool MonarchAudioProcessor::isBusesLayoutSupported (const BusesLayout& layouts) const
 {
-    return layouts.getMainOutputChannelSet() == juce::AudioChannelSet::stereo()
-           && layouts.getMainInputChannelSet() == juce::AudioChannelSet::stereo();
+    const auto& mainIn = layouts.getMainInputChannelSet();
+    const auto& mainOut = layouts.getMainOutputChannelSet();
+
+    // Guitar-pedal layout: mono or stereo only, with the input matching the output
+    // (no up-/down-mixing). This lets the plugin load on mono tracks as well as stereo.
+    if (mainOut != juce::AudioChannelSet::mono() && mainOut != juce::AudioChannelSet::stereo())
+        return false;
+
+    return mainIn == mainOut;
 }
 
 void MonarchAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::MidiBuffer&)

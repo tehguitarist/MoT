@@ -35,8 +35,15 @@ The most common mistake. Check ALL of the following:
   antiparallel pairs, not the actual back-to-back-series topology).
 - **FAIL if `n = 1.512` is used instead of `n_eff ≈ 3.024`** — using single-diode `n`
   halves the effective clipping threshold (≈0.82V instead of ≈1.64V).
-- Confirm the single `DiodePairT` is in series with `ResistorT(R11=6.8k)`, and this
-  combination is in `WDFParallelT` with R10(220k).
+- Confirm R11=6.8k is in series with the diode network and R10=220k is in parallel. NOTE the
+  IMPLEMENTED structure (`src/dsp/SW1SoftClip.h`) is the **current-source / diode-root**
+  formulation, NOT a literal `WDFParallelT`-at-an-R-type: the op-amp virtual ground makes
+  `i_in = Vin/Z_in` known, driving `R10 ∥ [R11+diode]` with the `DiodePairT` as the nonlinear
+  root (R10 = the `ResistiveCurrentSourceT`'s resistance; R11 = `WDFSeriesT(r11, iSrc)`). This
+  is equivalent — **do NOT FAIL for the absence of `WDFParallelT`/R-type**; confirm R11 in
+  series + R10 in parallel + diode as root, and the validated soft-clip behaviour.
+- The `n_eff≈3.024` is passed as the DiodePairT **4th arg (`nDiodes`)**, which scales Vt
+  (Vt_internal = nDiodes·Vt) — equivalent to doubling the ideality. Confirm it's `2*n_MA856`.
 - Confirm `DiodeQuality::Best`
 - **FAIL if `DiodeT` (single-polarity) is used instead of `DiodePairT`** — symmetric.
 - **FAIL if old placeholder values (Is=1e-14 or n=1.752) are present** — these are wrong by 327mV Vf
@@ -47,9 +54,17 @@ The most common mistake. Check ALL of the following:
 - **FAIL if `DiodeT` is used** — this pair is also symmetric
 
 ### 4. Stage Polarity — Critical
-- **Stage 1 (IC_A, non-inverting):** Confirm NO `PolarityInverterT` — FAIL if one is present
-- **Stage 2 (IC_B, inverting):** Confirm `PolarityInverterT` IS present — FAIL if absent
-- Omitting the Stage 2 inverter produces wrong polarity and asymmetric clipping in the wrong direction
+- **Stage 1 (IC_A, non-inverting):** output in phase with input. No inversion.
+- **Stage 2 (IC_B, inverting):** output MUST be inverted (passband gain **−22**, i.e. a
+  NEGATIVE signed gain). This is the actual gate — verify it via the measured signed/phase
+  gain, NOT by the presence of a specific element.
+- **Mechanism note (VCVS-root-R-type approach, as implemented):** inversion is carried by the
+  op-amp VCVS terminal assignment in the netlist (`in+ = BIAS, in− = pin6−`), not a separate
+  `PolarityInverterT`. **Do NOT FAIL Stage 2 for a missing `PolarityInverterT`** — confirm the
+  inverting behaviour instead. (A non-inverting VCVS assignment is positive feedback → NaN, so a
+  stable −22 gain proves the inversion is physical.) The neither-stage-needs-`PolarityInverterT`
+  result is expected with this WDF structure.
+- A wrong Stage 2 polarity produces asymmetric clipping in the wrong direction downstream.
 
 ### 5. WDF Topology
 - Stage 1: R-type adaptor at IC_A pin 2(–) — ports: Branch1=R7(33k)+C5, Branch2=R8(27k)+C6,
@@ -57,9 +72,11 @@ The most common mistake. Check ALL of the following:
   assume Hi-Gain modifies Branch2 to R8_eff≈12168Ω.)
 - Stage 2: R-type adaptor at IC_B pin 6(–) — ports: R9(10k input), R10(220k feedback)
   ∥ (SW-1 branch: R11(6.8k)+DiodePairT(n_eff≈3.024))
-- SW-1: ONE `DiodePairT` (n_eff=2×n_MA856) in series with R11(6.8k), this combination in
-  `WDFParallelT` with R10(220k), between IC_B pin6(–) and pin7. FAIL if modelled as two
-  DiodePairT in parallel, or if R11 is missing/misplaced.
+- SW-1: ONE `DiodePairT` (n_eff=2×n_MA856) with R11(6.8k) in series and R10(220k) in
+  parallel, in the IC_B feedback. IMPLEMENTED as current-source/diode-root (op-amp virtual
+  ground → known i_in drives `R10 ∥ [R11+diode]`, diode = root) — equivalent to the
+  R-type-with-parallel-branch description; accept it. FAIL only if TWO DiodePairT are used,
+  R11 is missing/misplaced, or R10 is absent (not the `ResistiveCurrentSourceT` resistance).
 - SW-2: 1S1588 DiodePairT (true antiparallel) shunting node_HC to BIAS; R12(1k) — NOT
   R11 — always in series between IC_B pin7 (output, post-inverter) and node_HC.
 - Tone stage: R-type adaptor (3-port) at the TONE pot wiper — Port0=R_a (toward

@@ -4,3 +4,9 @@ build/
 *.xcworkspace
 Builds/
 JuceLibraryCode/
+
+# Tooling: cloned upstream R-Solver, Python venv, caches (r_solver_sympy.py is our own port)
+tools/R-Solver/
+tools/rsolver-venv/
+tools/__pycache__/
+*.pyc

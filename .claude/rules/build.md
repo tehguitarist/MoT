@@ -53,8 +53,9 @@ monarch-pedal/
 │   └── chowdsp_wdf/
 └── tests/
     ├── SmokeTest_RC.cpp
-    ├── Stage1_FreqResponse.cpp       ← combined input network + feedback network; gain
-    │                                    peak near ~4194 Hz at mid-DRIVE (CCRMA), measured
+    ├── Stage1_FreqResponse.cpp       ← input network + gain stage; validates peak GAIN
+    │                                    +13.88 dB, DC shelf, DRIVE monotonicity (peak freq
+    │                                    bilinear-warped — see dsp.md). PASS.
     ├── Stage1_HiGain.cpp             ← verify +4 dB gain shift in Hi Gain mode
     ├── Stage2_Gain.cpp               ← DC gain = –22; HPF corner 159 Hz (C7=100nF)
     ├── SW1SoftClip_Sine.cpp          ← MA856 symmetric soft clip; Vf ~0.82V onset
@@ -127,15 +128,24 @@ WarningsAsErrors: ""
 
 - Step 2: AU and VST3 scan and load in a DAW
 - Step 3: RC lowpass smoke test — correct -3dB point
-- Step 4a: Stage 1 (combined input network + feedback network) frequency response — verify
-  Av(s) shape (DC gain ≈1, gain peak in the few-kHz region per CCRMA Fig. 6 at mid-DRIVE;
-  measure and record the actual peak frequency/gain from the implemented model)
+- Step 4a: Stage 1 frequency response — ✅ PASS (2026-06-17). DC-servo shelf ≈ unity
+  (−0.08 dB), peak +13.93 dB @ 3780 Hz (96k; analog 3803 Hz, −23 Hz bilinear warp), DRIVE
+  +4.45→+18.22 dB monotonic. Accurate at base rate (−74 Hz @ 48k) — no oversampling/prewarp
+  needed for the linear stages. An earlier ~−880 Hz error was an output-reconstruction bug
+  (fixed: reconstruct V(NodeG) from passive ports, not the source port — see dsp.md).
 - Step 4b: Stage 1 Hi Gain — verify gain increase (~+4 dB target) vs standard mode
-- Step 4c: Stage 2 — DC gain = ×22 inverting (R10/R9 = 220k/10k); HPF corner **159 Hz** (C7=100nF, R9=10k)
-- Step 5a: SW-1 soft-clip — symmetric sine clipping; onset ≈1.64V (2×Vf_MA856, via the
-  back-to-back series-string diode network in series with R11, ∥ R10)
-- Step 5b: SW-2 hard-clip — symmetric sine clipping; onset ~0.584V (1S1588 Vf, true
-  antiparallel pair shunting node_HC via always-present R12); harder knee than SW-1
+- Step 4c: Stage 2 — ✅ PASS (2026-06-17). Inverting passband gain 21.90× (−22 target,
+  R10/R9 = 220k/10k); HPF corner **159 Hz** exactly (C7=100nF, R9=10k); signed gain −21
+  (inverting). Inversion via op-amp VCVS terminals (no PolarityInverterT); output off passive
+  R10 port. `tests/Stage2_Gain.cpp`, dsp-validator PASS.
+- Step 5a: SW-1 soft-clip — ✅ PASS (2026-06-17). Small-signal −21.5 (inverting), PERFECTLY
+  symmetric clipping, soft knee with output ≈1.63V @ 0.5V in rising to 2.67V @ 2V in (soft,
+  not hard-clamped). The ~1.6V threshold (vs 0.82V single-diode) confirms n_eff≈3.024.
+  Current-source/diode-root formulation. `tests/SW1SoftClip_Sine.cpp`, dsp-validator PASS.
+- Step 5b: SW-2 hard-clip — ✅ PASS (2026-06-17). Gain ≈+1 (shunt, non-inverting), perfectly
+  symmetric, HARD clamp ±0.55V @ 1V in rising only to 0.66V @ 10V (diode-log; ~1.6 dB out per
+  20 dB in). 1S1588 true antiparallel via always-present R12=1k. `tests/SW2HardClip_Sine.cpp`,
+  dsp-validator PASS.
 - Step 6: All 8 mode combinations verified per channel (Boost/OD/Dist/Both × standard/HiGain).
   **Boost mode must clip on the op-amp rails (≈±3.3V, soft knee) — not stay infinitely clean.**
   Diode modes must clip at the diode thresholds (≈±1.64V / ≈±0.584V), proving the rail

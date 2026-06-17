@@ -218,6 +218,9 @@ def main():
     p.add_argument("--datum", type=int, default=0)
     p.add_argument("--adapt", type=int, default=-1)
     p.add_argument("--out", default=None)
+    p.add_argument("--ideal-opamp", action="store_true",
+                   help="Take the ideal-op-amp limit on any VCVS: Ro->0, A->oo, Ri->oo, "
+                        "yielding a matrix in the port impedances only.")
     p.add_argument("--verbose", action="store_true")
     args = p.parse_args()
 
@@ -234,6 +237,20 @@ def main():
     adapt_expr = None
     if args.adapt >= 0:
         S, adapt_expr = adapt_port(S, Rp, args.adapt)
+
+    if args.ideal_opamp and num_extras > 0:
+        A = sp.Symbol("A")
+        Ri = sp.Symbol("Ri")
+        Ro = sp.Symbol("Ro")
+        print("Taking ideal-op-amp limit (Ro->0, A->oo, Ri->oo) ...")
+
+        def ideal(e):
+            e = sp.cancel(e.subs(Ro, 0))
+            e = sp.limit(e, A, sp.oo)
+            e = sp.limit(e, Ri, sp.oo)
+            return sp.cancel(e)
+
+        S = S.applyfunc(ideal)
 
     S = sp.simplify(S)
     argstr = "r_solver_sympy.py " + " ".join(sys.argv[1:])
