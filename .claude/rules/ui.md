@@ -11,45 +11,50 @@
 ## Layout — Two-Channel Pedal Face
 
 Reference: `king_of_tone_pedal_picture.jpg` — white enclosure, gold compass rose, black knobs.
-The King of Tone has two identical channels side by side, labelled A and B. Layout mirrors this directly.
+The King of Tone has two identical channels side by side. We name them by their LED colour:
+the first channel is **Yellow**, the second is **Red**. Signal runs Yellow → Red in series.
+Layout mirrors the hardware directly. Note there is **no Hi Gain control** — the Hi-Gain mod
+is a fixed part of the Red channel only and is not user-switchable (see architecture.md).
 
 ```
 ┌──────────────────────────────────────────────────────────┐
 │  [INPUT TRIM]                             [OUTPUT TRIM]  │  ← plugin-only, visually distinct
 ├──────────────────────────────────────────────────────────┤
-│           CHANNEL A              CHANNEL B               │
-│  [VOLUME A]  [DRIVE A]  [TONE A] [VOLUME B] [DRIVE B] [TONE B]  │  ← main knobs
+│           YELLOW CHANNEL          RED CHANNEL            │
+│  [VOL Y]  [DRIVE Y]  [TONE Y]   [VOL R] [DRIVE R] [TONE R] │  ← main knobs
 │                                                          │
-│  [CLIP A]  [HI GAIN A] [●LED A] [●LED B] [HI GAIN B] [CLIP B]  │  ← mode controls + LEDs
+│  [CLIP Y]      [●LED Y(yellow)] [●LED R(red)]    [CLIP R] │  ← mode selectors + LEDs
 │  Boost/OD/Dist/Both                      Boost/OD/Dist/Both     │
 │                                                          │
-│  [PRESENCE A]  ◆ MONARCH OF TONE ◆  [PRESENCE B]        │  ← internal trim knobs + logo
+│  [PRESENCE Y]  ◆ MONARCH OF TONE ◆  [PRESENCE R]       │  ← internal trim knobs + logo
 │                                                          │
-│    [BYPASS A ⬤]                   [BYPASS B ⬤]          │  ← footswitches, bottom
+│    [BYPASS Y ⬤]                   [BYPASS R ⬤]          │  ← footswitches, bottom
 │  [OVERSAMPLING LIVE]  [OVERSAMPLING RENDER]              │  ← plugin-only controls
 │  [IN  METER] ▐▐▐▐▐▐▐▐▐                                 │
 │  [OUT METER] ▐▐▐▐▐▐▐▐▐                                 │
 └──────────────────────────────────────────────────────────┘
 ```
 
+The Red channel's panel may carry a small fixed "Hi Gain" badge/label (non-interactive) to
+communicate that it is the higher-gain voice — purely cosmetic, not a control.
+
 ## Controls
 
 ### Knobs (×6 main, ×2 presence)
 - Three main knobs per channel: Volume, Drive, Tone
-- Labels: "Volume", "Drive", "Tone" (same on both channels; distinguished by A/B column)
+- Labels: "Volume", "Drive", "Tone" (same on both channels; distinguished by Yellow/Red column)
 - Drive and Tone: linear taper — applied in DSP, not UI
 - Volume: audio taper — applied in DSP, not UI
 - Style: large black knurled knobs with white indicator line (reference KOT photo)
 - JUCE `Slider` (rotary) + custom LookAndFeel paint
-- Presence knobs: smaller, same style, labelled "Presence A" / "Presence B"
+- Presence knobs: smaller, same style, labelled "Presence Yellow" / "Presence Red"
 - Default Presence = fully CCW (matches hardware default = no treble boost)
 
-### Hi Gain Toggle (×2, one per channel)
-- Small toggle button or LED-style indicator per channel, labelled "Hi Gain"
-- Two states: off (standard gain range) and on (hi gain range, +4 dB shift)
-- Placed adjacent to the clipping mode selector for each channel
-- Visual style: small illuminated toggle — lit when Hi Gain is active
-- Maps to `hi_gain_a` / `hi_gain_b` APVTS parameters
+### Hi Gain — no control
+There is **no Hi Gain toggle**. The Theseus Hi-Gain mod is a fixed part of the Red channel's
+Stage 1 (baked in at construction, see architecture.md) and the Yellow channel is always
+stock. At most, the Red panel shows a cosmetic, non-interactive "Hi Gain" badge. No
+`AudioParameterBool`, no automation, no LED toggle.
 
 ### Clipping Mode Selector (×2, one per channel)
 - 4-position selector per channel: **Boost / Overdrive / Distortion / Both**
@@ -64,9 +69,10 @@ The King of Tone has two identical channels side by side, labelled A and B. Layo
 
 ### LEDs (×2)
 - Small circular indicator per channel, between knobs and bypass
-- ON (red, matching KOT red LED aesthetic) = channel active
-- OFF = channel bypassed
-- State from `std::atomic<bool> bypassedA / bypassedB`
+- The channel names come from these LEDs: the first channel's LED is **yellow**
+  (`colourLEDActiveYellow`), the second's is **red** (`colourLEDActiveRed`)
+- ON = channel active; OFF (dim) = channel bypassed
+- State from `std::atomic<bool> bypassedYellow / bypassedRed`
 
 ### Input Trim / Output Trim
 - Visually distinct from the main knobs (different size, placement, colour tint)
@@ -99,8 +105,10 @@ static constexpr juce::Colour colourKnob          { 0xFF1A1A1A }; // black knob 
 static constexpr juce::Colour colourKnobIndicator { 0xFFFFFFFF }; // white indicator line
 static constexpr juce::Colour colourAccent        { 0xFFCCA42A }; // gold (KOT compass rose)
 static constexpr juce::Colour colourChannelDivider{ 0xFFCCA42A }; // gold divider between channels
-static constexpr juce::Colour colourLEDActive     { 0xFFFF3300 }; // red LED on (KOT-style red)
-static constexpr juce::Colour colourLEDInactive   { 0xFF3A1000 }; // dim red LED off
+static constexpr juce::Colour colourLEDActiveYellow { 0xFFFFC21A }; // Yellow channel LED on
+static constexpr juce::Colour colourLEDInactiveYellow { 0xFF3A2E00 }; // dim Yellow LED off
+static constexpr juce::Colour colourLEDActiveRed    { 0xFFFF3300 }; // Red channel LED on (KOT-style red)
+static constexpr juce::Colour colourLEDInactiveRed  { 0xFF3A1000 }; // dim Red LED off
 static constexpr juce::Colour colourLabelText     { 0xFF1A1A1A }; // dark text on white face
 static constexpr juce::Colour colourMeterLow      { 0xFF44CC44 }; // meter green
 static constexpr juce::Colour colourMeterMid      { 0xFFDDCC00 }; // meter yellow

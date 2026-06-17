@@ -151,7 +151,7 @@ When DRIVE=max: Z_upper_max = R6 + 100k = 110k. The Stage 2 input resistor is R9
 
 6. **FOOT SW2-1 / FOOT SW2-2** (footswitch contacts visible in the SW-2 and
    Trim/VOL crops) are the physical true-bypass footswitch wiring — **not part of the WDF
-   signal model**. Per `architecture.md`, bypass is implemented via `bypassedA`/`bypassedB`
+   signal model**. Per `architecture.md`, bypass is implemented via `bypassedYellow`/`bypassedRed`
    atomics, not by modelling the footswitch contacts.
 
 **Decision:** Sections 9, 10, 11, 13, 14 corrected accordingly. These are topology
@@ -384,7 +384,14 @@ Z_lower corners (~482/590 Hz, rising) and the Z_upper corner (~14.5–159 kHz, f
 
 **No PolarityInverterT** — Stage 1 is non-inverting.
 
-**Hi Gain mod (SW-3) — ⚠️ UNDER REVISION, see Theseus cross-check below:**
+**Hi Gain mod — ⚠️ UNDER REVISION (topology), now FIXED to the Red channel only:**
+
+> **DESIGN DECISION 2026-06-17.** Hi Gain is a **fixed mod on the Red (second) channel
+> only** — not a runtime toggle on either channel. The Yellow channel is always stock. This
+> removes the per-channel `hi_gain_*` parameter and the runtime Stage-1 scattering swap; Red
+> simply constructs Stage 1 with the Hi-Gain matrix. The *topology* below is still unresolved
+> (see the discrepancy note), so until it is pinned, **Red's Stage 1 uses the stock voicing as
+> a fallback**. See Section 19.
 
 > **DISCREPANCY FOUND 2026-06-16 (Theseus schematic, page 28 hi-res trace).** The model
 > below (R29 ∥ R8 in Z_lower Branch2) is **NOT what the Theseus schematic actually shows**
@@ -661,7 +668,7 @@ needed there (simple series/parallel tree).
 > crop): VOL pot top terminal = `node_T_out` (Section 11), bottom terminal = BIAS, wiper →
 > C11 → output rail. A footswitch (FOOT SW2-2) sits between `node_T_out` and the VOL pot's
 > top terminal in the physical schematic — this is true-bypass wiring, **excluded from the
-> WDF model** per `architecture.md` (bypass handled via `bypassedA`/`bypassedB` atomics).
+> WDF model** per `architecture.md` (bypass handled via `bypassedYellow`/`bypassedRed` atomics).
 
 **Components (from matsumin schematic):**
 
@@ -847,16 +854,23 @@ One `DiodePairT` instance.
 
 ## 18. Clipping Mode Summary (Per Channel)
 
-| Mode | SW-1 | SW-2 | SW-3 Hi Gain | Clamp | Character |
-|------|------|------|-------------|-------|-----------|
-| Boost | OFF | OFF | OFF | None | Clean boost |
-| Boost Hi | OFF | OFF | ON | None | Higher gain clean boost |
-| Overdrive | ON | OFF | OFF | ±0.82V | Soft, touch-sensitive |
-| Overdrive Hi | ON | OFF | ON | ±0.82V | More aggressive OD |
-| Distortion | OFF | ON | OFF | ±0.584V | Hard RAT-style |
-| Distortion Hi | OFF | ON | ON | ±0.584V | High-gain hard clip |
-| Both | ON | ON | OFF | ±0.82V→±0.584V | Stacked dual threshold |
-| Both Hi | ON | ON | ON | ±0.82V→±0.584V | Max gain + stacked |
+> **Hi Gain is now a FIXED per-channel build option, not a runtime mode (decision 2026-06-17).**
+> The **Yellow** channel is always standard (Hi Gain OFF); the **Red** channel is always
+> Hi Gain ON. So each channel exposes only its 4 clipping modes (Boost/OD/Dist/Both) via the
+> `clipping_mode_*` parameter — there is no Hi-Gain toggle. The full 8-row table below is
+> retained only as the per-channel reference: read the **OFF** rows for Yellow and the
+> **ON** rows for Red.
+
+| Mode | SW-1 | SW-2 | Hi Gain (fixed) | Clamp | Character | Channel |
+|------|------|------|-------------|-------|-----------|---------|
+| Boost | OFF | OFF | OFF | None | Clean boost | Yellow |
+| Boost (Hi) | OFF | OFF | ON | None | Higher gain clean boost | Red |
+| Overdrive | ON | OFF | OFF | ±0.82V | Soft, touch-sensitive | Yellow |
+| Overdrive (Hi) | ON | OFF | ON | ±0.82V | More aggressive OD | Red |
+| Distortion | OFF | ON | OFF | ±0.584V | Hard RAT-style | Yellow |
+| Distortion (Hi) | OFF | ON | ON | ±0.584V | High-gain hard clip | Red |
+| Both | ON | ON | OFF | ±0.82V→±0.584V | Stacked dual threshold | Yellow |
+| Both (Hi) | ON | ON | ON | ±0.82V→±0.584V | Max gain + stacked | Red |
 
 ---
 
@@ -868,17 +882,26 @@ corrected 3-terminal-pot-tap topology and R-type WDF model. The 2026-06-16 These
 cross-reference (Section 2) **confirmed** the SW-1 soft-clip, SW-2 hard-clip, tone,
 presence, volume, and output topology by function-matching.
 
-**OPEN ITEM (reopened 2026-06-16): Stage-1 Hi-Gain (SW-3) wiring.** The Theseus
-cross-reference invalidated the prior "R29(22k) ∥ R8(27k) in Z_lower Branch2" model —
-R29/R27 are power-supply parts, and the real Hi-Gain element is SW1B switching R3(1k) in
-the Stage-1 DRIVE feedback, but the exact wiring (which sub-net R3 modifies; gain
-direction/magnitude) is not yet pinned. matsumin (primary source) does not contain the mod.
-**Resolve before implementing Stage-1 Hi-Gain** via one of: a higher-resolution Theseus
-schematic, the AionFX Theseus gain-stage analysis, or KOT community Hi-Gain mod notes.
-See Section 6.
+**OPEN ITEM (reopened 2026-06-16): Stage-1 Hi-Gain wiring.** The Theseus cross-reference
+invalidated the prior "R29(22k) ∥ R8(27k) in Z_lower Branch2" model — R29/R27 are
+power-supply parts, and the real Hi-Gain element is SW1B switching R3(1k) in the Stage-1
+DRIVE feedback, but the exact wiring (which sub-net R3 modifies; gain direction/magnitude)
+is not yet pinned. matsumin (primary source) does not contain the mod. **Resolve before
+implementing Stage-1 Hi-Gain** via one of: a higher-resolution Theseus schematic, the AionFX
+Theseus gain-stage analysis, or KOT community Hi-Gain mod notes. See Section 6.
 
-**Implementation order** (Step 4): Stage1 → **Stage1 Hi Gain (BLOCKED — see open item)** →
-Stage2 → SW1SoftClip → SW2HardClip → ToneStage. The Stage1 (stock), Stage2, SW-1, SW-2,
-and Tone sections are finalized and ready; only Stage-1 Hi-Gain is blocked. Stages can be
-implemented in this order with Hi-Gain deferred until its topology is confirmed (it is an
-isolated scattering-matrix swap on the otherwise-finalized Stage 1).
+> **SCOPE NARROWED 2026-06-17.** Hi Gain is now a **fixed mod applied to the Red channel
+> only** — it is no longer a runtime per-channel toggle (no `hi_gain_*` parameter, no
+> scattering-matrix swap at runtime). This does **not** resolve the topology open item above
+> (we still need the correct R3/SW1B wiring to build the Red channel's fixed Stage 1), but it
+> simplifies the architecture: Red's Stage 1 uses one fixed Hi-Gain scattering matrix chosen
+> at construction, Yellow's uses the stock one. Until the topology is confirmed, **Red's
+> Stage 1 falls back to the validated stock voicing** so the rest of the build proceeds; swap
+> in the Hi-Gain matrix once the wiring is pinned.
+
+**Implementation order** (Step 4): Stage1 (stock) → Stage2 → SW1SoftClip → SW2HardClip →
+ToneStage, then **Red-channel Stage-1 Hi-Gain (fixed, BLOCKED on topology)**. The Stage1
+(stock), Stage2, SW-1, SW-2, and Tone sections are finalized and ready. Hi-Gain is no longer
+on the critical path — it is a single fixed scattering matrix dropped into the Red channel's
+Stage 1 once its topology is confirmed; everything else (including the full Yellow channel and
+Red's stock-fallback) can be completed first.

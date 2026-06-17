@@ -139,6 +139,7 @@ Both channels are identical circuits. Implement a single `MonarchChannel` class 
 
 ```cpp
 class MonarchChannel {
+    explicit MonarchChannel (bool hiGain);  // hiGain bakes the fixed Stage-1 Hi-Gain voicing
     Stage1          stage1;       // IC_A non-inverting; includes input network (C3/R4/R5)
     Stage2          stage2;       // IC_B inverting + clipping
     ToneStage       tone;         // passive RC
@@ -146,16 +147,17 @@ class MonarchChannel {
     juce::dsp::Oversampling<double> oversampler;
 };
 
-MonarchChannel channelA;
-MonarchChannel channelB;
+MonarchChannel channelYellow { false }; // first channel, stock Stage 1
+MonarchChannel channelRed    { true };  // second channel, fixed Hi-Gain Stage 1
 ```
 
 Channel routing:
 ```
-inputSample → channelA.process() → channelA_output → channelB.process() → output
+inputSample → channelYellow.process() → yellow_output → channelRed.process() → output
 ```
 
-Each channel has independent APVTS parameters (e.g., `drive_a`, `drive_b`, `tone_a`, `tone_b` etc.).
+Each channel has independent APVTS parameters (e.g., `drive_yellow`, `drive_red`,
+`tone_yellow`, `tone_red` etc.). There is no `hi_gain_*` parameter — Hi Gain is fixed on Red.
 
 ## Oversampling
 
@@ -175,7 +177,24 @@ Each channel has independent APVTS parameters (e.g., `drive_a`, `drive_b`, `tone
 - ADAA in addition to oversampling, not instead
 - Reference: DAFx2020 "Antiderivative antialiasing in nonlinear wave digital filters"
 
-## Hi Gain Mod — Stage 1 Scattering Matrix Switch
+## Hi Gain Mod — FIXED on the Red channel (no runtime switch)
+
+> **DESIGN DECISION 2026-06-17.** Hi Gain is a **fixed mod on the Red channel only**, chosen
+> at construction — **not** a runtime, per-channel `setSMatrixData()` swap driven by a
+> parameter. `MonarchChannel` takes a `bool hiGain` ctor arg: Yellow = `false` (stock Stage 1
+> matrix), Red = `true` (Hi-Gain Stage 1 matrix). Stage 1 picks its scattering matrix **once**
+> based on that flag. Consequences:
+> - **No** `hi_gain_*` APVTS parameter, **no** `pendingHiGainA/B` atomic, **no** per-block
+>   Hi-Gain check in `processBlock`. (The SW-1/SW-2 *clipping-mode* swaps remain runtime.)
+> - Still precompute **both** Stage-1 matrices (stock + Hi-Gain) so Red can select Hi-Gain at
+>   construction; just never switch at runtime.
+> - The **topology** of the Hi-Gain matrix is still unresolved (see below). Until pinned,
+>   **Red selects the stock matrix as a fallback** — correct gain, just not yet hotter — so the
+>   build proceeds. Swap in the real Hi-Gain matrix once the wiring is confirmed.
+>
+> The code/notes below (the matrix derivation and the `setSMatrixData()` mechanism) still
+> describe how to *build* the Hi-Gain matrix; only the *trigger* changed from "runtime
+> parameter" to "fixed at construction for Red."
 
 > **⚠️ UNDER REVISION 2026-06-16 — DO NOT IMPLEMENT THE CODE BELOW YET.** A hi-res trace of
 > the Theseus schematic (page 28) shows the previous "R29(22k) ∥ R8(27k) in Z_lower Branch2"
@@ -196,7 +215,8 @@ Each channel has independent APVTS parameters (e.g., `drive_a`, `drive_b`, `tone
 // constexpr double R8_hi_gain = (27.0e3 * 22.0e3) / (27.0e3 + 22.0e3) + 47.0; // ≈ 12168 Ω
 ```
 
-Switch at block start via `setSMatrixData()` when `pendingHiGainA/B` changes. No tree reconstruction.
+Select the matrix **once at construction** via `setSMatrixData()` from the `hiGain` ctor flag
+(Red = Hi-Gain, Yellow = stock). No runtime switch, no tree reconstruction, no atomic.
 
 **Effect on Stage 1 gain range:**
 A smaller Branch2 resistor reduces Z_lower in the mid/high band, increasing
@@ -204,8 +224,9 @@ Av(s) = 1 + Z_upper(s)/Z_lower(s) — targeting the documented +4 dB shift. Meas
 actual shift from the implemented model via the frequency-response test; do not assume
 specific Av values until validated.
 
-The Hi Gain and clipping mode changes are independent — both can change simultaneously
-within the same block start check. Handle them as separate atomic flags.
+Hi Gain is fixed per channel (Red on, Yellow off); only the clipping mode (SW-1/SW-2) changes
+at runtime. They no longer share a block-start check — clipping mode is the only per-block
+topology update.
 
 ## Pot Tapers
 
@@ -327,7 +348,7 @@ explicitly rejected: a fixed prewarp freezes the gain peak in place across the D
 - **Input trim (±12 dB)** absorbs hotter/quieter pickups — mirroring how a player sets guitar
   volume / pedal placement to position the clipping. **Output trim** rematches level after.
   No tone-shaping in the trims; they only set where the (fixed-threshold) nonlinearities sit.
-- Input trim → VU meter → Channel A → Channel B → VU meter → Output trim
+- Input trim → VU meter → Yellow channel → Red channel → VU meter → Output trim
 
 ## processBlock Structure (per channel)
 
@@ -336,17 +357,17 @@ explicitly rejected: a fixed prewarp freezes the gain peak in place across the D
    - isNonRealtime() ? read oversampling_render : read oversampling_realtime
    - If active factor != current factor: set pendingOversamplingFactor, reinit oversampler
 2. Check pendingClippingMode (per channel) — update SW-1/SW-2 scattering matrices if changed
-3. Check pendingHiGain (per channel) — update Stage 1 scattering matrix if changed
-4. Read APVTS parameter values (smoothed) for this channel
-5. Apply taper conversion (audio taper to VOL only)
-6. Update WDF node values
-7. If channel bypassed:
+   (Stage 1 Hi-Gain is fixed at construction — Red on, Yellow off — so no Stage 1 swap here)
+3. Read APVTS parameter values (smoothed) for this channel
+4. Apply taper conversion (audio taper to VOL only)
+5. Update WDF node values
+6. If channel bypassed:
    - Copy input → output directly (no DSP, no oversampler)
    - Return early
-8. Else:
+7. Else:
    a. Upsample clipping stage block (active factor may be 1x = no-op)
    b. Process full WDF chain sample by sample
    c. Downsample clipping stage block
 ```
 
-Global processBlock chains: inputTrim → channelA.process() → channelB.process() → outputTrim
+Global processBlock chains: inputTrim → channelYellow.process() → channelRed.process() → outputTrim

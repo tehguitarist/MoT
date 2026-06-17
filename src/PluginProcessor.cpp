@@ -18,48 +18,52 @@ juce::AudioProcessorValueTreeState::ParameterLayout MonarchAudioProcessor::creat
     const juce::StringArray clippingModeChoices { "Boost", "Overdrive", "Distortion", "Both" };
     const juce::StringArray oversamplingChoices { "1x", "2x", "4x", "8x" };
 
-    for (const auto& channel : { "a", "b" })
+    // The two series channels are identified externally by their LED colour: the first
+    // channel is "Yellow", the second is "Red". The Theseus Hi-Gain mod is a FIXED part of
+    // the Red channel's Stage 1 (not a runtime parameter) — see circuit.md Section 6.
+    struct ChannelSpec
     {
-        const juce::String suffix = channel;
-        const juce::String label = suffix.toUpperCase();
+        const char* id;
+        const char* label;
+    };
+
+    for (const auto& channel : { ChannelSpec { "yellow", "Yellow" }, ChannelSpec { "red", "Red" } })
+    {
+        const juce::String id = channel.id;
+        const juce::String label = channel.label;
 
         params.push_back (std::make_unique<juce::AudioParameterFloat> (
-            juce::ParameterID { "drive_" + suffix, 1 },
+            juce::ParameterID { "drive_" + id, 1 },
             "Drive " + label,
             juce::NormalisableRange<float> (0.0f, 1.0f),
             0.5f));
 
         params.push_back (std::make_unique<juce::AudioParameterFloat> (
-            juce::ParameterID { "tone_" + suffix, 1 },
+            juce::ParameterID { "tone_" + id, 1 },
             "Tone " + label,
             juce::NormalisableRange<float> (0.0f, 1.0f),
             0.5f));
 
         params.push_back (std::make_unique<juce::AudioParameterFloat> (
-            juce::ParameterID { "volume_" + suffix, 1 },
+            juce::ParameterID { "volume_" + id, 1 },
             "Volume " + label,
             juce::NormalisableRange<float> (0.0f, 1.0f),
             0.5f));
 
         params.push_back (std::make_unique<juce::AudioParameterFloat> (
-            juce::ParameterID { "presence_" + suffix, 1 },
+            juce::ParameterID { "presence_" + id, 1 },
             "Presence " + label,
             juce::NormalisableRange<float> (0.0f, 1.0f),
             0.0f));
 
         params.push_back (std::make_unique<juce::AudioParameterChoice> (
-            juce::ParameterID { "clipping_mode_" + suffix, 1 },
+            juce::ParameterID { "clipping_mode_" + id, 1 },
             "Clipping " + label,
             clippingModeChoices,
             1));
 
         params.push_back (std::make_unique<juce::AudioParameterBool> (
-            juce::ParameterID { "hi_gain_" + suffix, 1 },
-            "Hi Gain " + label,
-            false));
-
-        params.push_back (std::make_unique<juce::AudioParameterBool> (
-            juce::ParameterID { "bypass_" + suffix, 1 },
+            juce::ParameterID { "bypass_" + id, 1 },
             "Bypass " + label,
             false));
     }
@@ -93,8 +97,8 @@ juce::AudioProcessorValueTreeState::ParameterLayout MonarchAudioProcessor::creat
 
 void MonarchAudioProcessor::prepareToPlay (double sampleRate, int samplesPerBlock)
 {
-    channelA.prepare (sampleRate, samplesPerBlock);
-    channelB.prepare (sampleRate, samplesPerBlock);
+    channelYellow.prepare (sampleRate, samplesPerBlock);
+    channelRed.prepare (sampleRate, samplesPerBlock);
 }
 
 void MonarchAudioProcessor::releaseResources()

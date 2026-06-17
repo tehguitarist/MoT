@@ -40,22 +40,21 @@ public:
     juce::AudioProcessorValueTreeState apvts;
 
 private:
-    monarch::MonarchChannel channelA;
-    monarch::MonarchChannel channelB;
+    // Two series channels, identified externally by LED colour. The Theseus Hi-Gain mod is a
+    // FIXED part of the Red channel's Stage 1 (passed at construction), not a runtime toggle.
+    monarch::MonarchChannel channelYellow { false }; // stock Stage 1
+    monarch::MonarchChannel channelRed { true };     // fixed Hi-Gain Stage 1
 
     std::atomic<float> inputLevelL { 0.0f };
     std::atomic<float> inputLevelR { 0.0f };
     std::atomic<float> outputLevelL { 0.0f };
     std::atomic<float> outputLevelR { 0.0f };
 
-    std::atomic<bool> bypassedA { false };
-    std::atomic<bool> bypassedB { false };
+    std::atomic<bool> bypassedYellow { false };
+    std::atomic<bool> bypassedRed { false };
 
-    std::atomic<int> pendingClippingModeA { 1 };
-    std::atomic<int> pendingClippingModeB { 1 };
-
-    std::atomic<bool> pendingHiGainA { false };
-    std::atomic<bool> pendingHiGainB { false };
+    std::atomic<int> pendingClippingModeYellow { 1 };
+    std::atomic<int> pendingClippingModeRed { 1 };
 
     std::atomic<int> pendingOversamplingFactor { 0 };
 

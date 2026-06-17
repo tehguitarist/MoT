@@ -6,9 +6,14 @@
 - All UI runs on the **message thread**
 - Cross-thread communication: `std::atomic` only — no locks, mutexes, or blocking calls on the audio thread
 - Meter levels: `std::atomic<float>` written by audio thread, read by UI timer
-- Bypass state per channel: `std::atomic<bool> bypassedA`, `std::atomic<bool> bypassedB`
-- Clipping mode per channel: `std::atomic<int> pendingClippingModeA`, `std::atomic<int> pendingClippingModeB`
-- Hi Gain mode per channel: `std::atomic<bool> pendingHiGainA`, `std::atomic<bool> pendingHiGainB`
+- The two series channels are named by LED colour: **Yellow** (first) and **Red** (second).
+- Bypass state per channel: `std::atomic<bool> bypassedYellow`, `std::atomic<bool> bypassedRed`
+- Clipping mode per channel: `std::atomic<int> pendingClippingModeYellow`, `std::atomic<int> pendingClippingModeRed`
+- **Hi Gain is NOT a runtime parameter.** It is a *fixed* Theseus mod baked into the Red
+  channel's Stage 1 only (passed to `MonarchChannel` at construction); Yellow is always
+  stock. There is no `pendingHiGain` atomic, no UI toggle, and no runtime scattering-matrix
+  swap for Hi Gain — the Red channel simply uses the Hi-Gain Stage 1 scattering matrix it was
+  built with. (The clipping-mode SW-1/SW-2 swaps are still runtime per channel.)
 - Oversampling: `std::atomic<int> pendingOversamplingFactor` (derived each block from `isNonRealtime()` + APVTS; single global setting applies to both channels)
 - Parameter changes: JUCE `AudioProcessorValueTreeState` with smoothed parameter values
 
@@ -18,46 +23,47 @@
 MonarchAudioProcessor          ← AudioProcessor subclass
   AudioProcessorValueTreeState apvts
   InputTrimStage
-  MonarchChannel channelA      ← full single-channel DSP
+  MonarchChannel channelYellow { false }  ← full single-channel DSP; stock Stage 1
     InputFilter   (linear WDF)
-    Stage1        (linear WDF, IC_A non-inverting ideal op-amp)
+    Stage1        (linear WDF, IC_A non-inverting ideal op-amp — stock voicing)
     Stage2        (linear WDF, IC_B inverting ideal op-amp + R-type at feedback node)
     SW1SoftClip   (nonlinear WDF — MA856×4 in feedback, 2 precomputed topologies)
     SW2HardClip   (nonlinear WDF — 1S1588×2 shunt, 2 precomputed topologies)
     ToneStage     (linear WDF passive)
     VolumePot     (linear)
     juce::dsp::Oversampling oversampler
-  MonarchChannel channelB      ← identical, independent parameter set
-    (same structure as channelA)
+  MonarchChannel channelRed { true }      ← identical chain, independent parameter set,
+    (same structure as channelYellow)        EXCEPT Stage 1 uses the fixed Hi-Gain voicing
   OutputTrimStage
   std::atomic<float> inputLevelL, inputLevelR
   std::atomic<float> outputLevelL, outputLevelR
-  std::atomic<bool>  bypassedA, bypassedB
-  std::atomic<int>   pendingClippingModeA, pendingClippingModeB
-  std::atomic<bool>  pendingHiGainA, pendingHiGainB
+  std::atomic<bool>  bypassedYellow, bypassedRed
+  std::atomic<int>   pendingClippingModeYellow, pendingClippingModeRed
   std::atomic<int>   pendingOversamplingFactor
+  // No pendingHiGain — Hi Gain is fixed-on for Red, fixed-off for Yellow (construction time)
 ```
 
 ## Parameters (APVTS IDs)
 
-Channel A and B have mirrored parameter sets:
+The two channels (**Yellow** = first, **Red** = second) have mirrored parameter sets — with
+one exception: there is **no Hi Gain parameter**. Hi Gain is a fixed mod on the Red channel
+only (baked in at construction), so it is not exposed or automatable. See the Hi Gain note
+below the table.
 
 | ID | Label | Range | Default | Notes |
 |----|-------|-------|---------|-------|
-| `drive_a` | Drive A | 0.0–1.0 | 0.5 | Linear taper (B-pot) applied in DSP |
-| `tone_a` | Tone A | 0.0–1.0 | 0.5 | Linear taper (B-pot) applied in DSP |
-| `volume_a` | Volume A | 0.0–1.0 | 0.5 | Audio taper (A-pot) applied in DSP |
-| `presence_a` | Presence A | 0.0–1.0 | 0.0 | Linear taper; default fully CCW (no boost) |
-| `clipping_mode_a` | Clipping A | 0/1/2/3 | 1 | `AudioParameterChoice`: "Boost"/"Overdrive"/"Distortion"/"Both" |
-| `hi_gain_a` | Hi Gain A | true/false | false | `AudioParameterBool`; OFF = standard, ON = Hi Gain mod |
-| `bypass_a` | Bypass A | true/false | false | `AudioParameterBool` |
-| `drive_b` | Drive B | 0.0–1.0 | 0.5 | As above |
-| `tone_b` | Tone B | 0.0–1.0 | 0.5 | As above |
-| `volume_b` | Volume B | 0.0–1.0 | 0.5 | As above |
-| `presence_b` | Presence B | 0.0–1.0 | 0.0 | As above |
-| `clipping_mode_b` | Clipping B | 0/1/2/3 | 1 | As above |
-| `hi_gain_b` | Hi Gain B | true/false | false | `AudioParameterBool` |
-| `bypass_b` | Bypass B | true/false | false | `AudioParameterBool` |
+| `drive_yellow` | Drive Yellow | 0.0–1.0 | 0.5 | Linear taper (B-pot) applied in DSP |
+| `tone_yellow` | Tone Yellow | 0.0–1.0 | 0.5 | Linear taper (B-pot) applied in DSP |
+| `volume_yellow` | Volume Yellow | 0.0–1.0 | 0.5 | Audio taper (A-pot) applied in DSP |
+| `presence_yellow` | Presence Yellow | 0.0–1.0 | 0.0 | Linear taper; default fully CCW (no boost) |
+| `clipping_mode_yellow` | Clipping Yellow | 0/1/2/3 | 1 | `AudioParameterChoice`: "Boost"/"Overdrive"/"Distortion"/"Both" |
+| `bypass_yellow` | Bypass Yellow | true/false | false | `AudioParameterBool` |
+| `drive_red` | Drive Red | 0.0–1.0 | 0.5 | As above |
+| `tone_red` | Tone Red | 0.0–1.0 | 0.5 | As above |
+| `volume_red` | Volume Red | 0.0–1.0 | 0.5 | As above |
+| `presence_red` | Presence Red | 0.0–1.0 | 0.0 | As above |
+| `clipping_mode_red` | Clipping Red | 0/1/2/3 | 1 | As above |
+| `bypass_red` | Bypass Red | true/false | false | `AudioParameterBool` |
 | `input_trim` | Input Trim | -12.0 to +12.0 dB | 0.0 | Plugin-only; `AudioParameterFloat` |
 | `output_trim` | Output Trim | -12.0 to +12.0 dB | 0.0 | Plugin-only; `AudioParameterFloat` |
 | `oversampling_realtime` | Oversampling (Live) | 0/1/2/3 | 2 (4x) | `AudioParameterChoice`: "1x"/"2x"/"4x"/"8x" — active during live playback |
@@ -67,6 +73,12 @@ Default `clipping_mode` = 1 (Overdrive = SW-1 ON, SW-2 OFF). This is the factory
 Default `presence` = 0.0 (fully CCW = no boost). This is the factory default per Analog Man.
 
 Note: Use `std::make_unique<AudioParameterBool>(...)` for bool params; APVTS does not accept raw bool.
+
+**Hi Gain (fixed mod, Red only):** The Theseus Hi-Gain mod is *not* a parameter. The Red
+channel's `MonarchChannel` is constructed with `hiGain=true` and the Yellow channel with
+`hiGain=false`; Stage 1 selects its fixed scattering matrix accordingly. There is nothing to
+save/restore, automate, or toggle. (Topology of the mod itself is still an open item — see
+circuit.md Section 6 — but it no longer affects the parameter/threading model either way.)
 
 ## Clipping Mode Mapping
 
@@ -80,7 +92,7 @@ Note: Use `std::make_unique<AudioParameterBool>(...)` for bool params; APVTS doe
 ## Channel Routing
 
 ```
-guitar input → [input trim] → channelA.process() → channelB.process() → [output trim] → amp output
+guitar input → [input trim] → channelYellow.process() → channelRed.process() → [output trim] → amp output
 ```
 
 When a channel is bypassed, its `process()` returns the input unchanged (no DSP). Both bypass states are independent. When both are bypassed the signal passes through both switches dry, matching the hardware's true-bypass behaviour.
@@ -89,7 +101,7 @@ When a channel is bypassed, its `process()` returns the input unchanged (no DSP)
 
 - True bypass per channel: input routed directly to output, zero DSP
 - Crossfade on bypass transition (~5ms ramp) to prevent clicks
-- `std::atomic<bool> bypassedA / bypassedB` — audio thread polls, applies ramp
+- `std::atomic<bool> bypassedYellow / bypassedRed` — audio thread polls, applies ramp
 - On DAW recall, bypass visual state reflects the restored APVTS parameter value
 
 ## Oversampling
@@ -114,21 +126,21 @@ All of the following in `prepareToPlay(sampleRate, samplesPerBlock)`:
 1. Determine active oversampling factor:
    isNonRealtime() ? oversampling_render : oversampling_realtime (read from APVTS)
    If active factor != current → set pendingOversamplingFactor, reinit both oversamplers
-2. Check pendingClippingModeA/B — update SW-1/SW-2 scattering matrices for changed channels
-3. Check pendingHiGainA/B — update Stage 1 scattering matrix for changed channels
-4. Read all APVTS parameter values (smoothed) for both channels
-5. Apply taper conversion (audio taper to VOL A/B only; all others linear)
-6. Update WDF node values in both channels
-7. Apply input trim gain
-8. Update input meter levels (std::atomic write)
-9. Process channelA:
-   - If bypassedA: copy input → output, skip DSP and oversampler
+2. Check pendingClippingModeYellow/Red — update SW-1/SW-2 scattering matrices for changed channels
+   (Hi Gain is fixed per channel — no per-block Stage 1 swap)
+3. Read all APVTS parameter values (smoothed) for both channels
+4. Apply taper conversion (audio taper to VOL Yellow/Red only; all others linear)
+5. Update WDF node values in both channels
+6. Apply input trim gain
+7. Update input meter levels (std::atomic write)
+8. Process channelYellow:
+   - If bypassedYellow: copy input → output, skip DSP and oversampler
    - Else: upsample → WDF chain → downsample
-10. Process channelB (input = channelA output):
-    - If bypassedB: copy input → output, skip DSP and oversampler
+9. Process channelRed (input = channelYellow output):
+    - If bypassedRed: copy input → output, skip DSP and oversampler
     - Else: upsample → WDF chain → downsample
-11. Apply output trim gain
-12. Update output meter levels (std::atomic write)
+10. Apply output trim gain
+11. Update output meter levels (std::atomic write)
 ```
 
 ## State Save/Restore

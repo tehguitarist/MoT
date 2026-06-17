@@ -42,8 +42,7 @@ monarch-pedal/
 │   │   ├── MonarchLookAndFeel.h / .cpp
 │   │   ├── KnobComponent.h / .cpp
 │   │   ├── ClippingModeSelector.h / .cpp
-│   │   ├── HiGainToggle.h / .cpp    ← per-channel Hi Gain switch
-│   │   ├── ChannelPanel.h / .cpp    ← one channel's controls (instantiated twice)
+│   │   ├── ChannelPanel.h / .cpp    ← one channel's controls (Yellow & Red instances; no Hi Gain toggle)
 │   │   ├── VUMeter.h / .cpp
 │   │   └── LEDIndicator.h / .cpp
 │   └── utils/
@@ -56,7 +55,7 @@ monarch-pedal/
     ├── Stage1_FreqResponse.cpp       ← input network + gain stage; validates peak GAIN
     │                                    +13.88 dB, DC shelf, DRIVE monotonicity (peak freq
     │                                    bilinear-warped — see dsp.md). PASS.
-    ├── Stage1_HiGain.cpp             ← verify +4 dB gain shift in Hi Gain mode
+    ├── Stage1_HiGain.cpp             ← verify +4 dB gain shift of Red's fixed Hi-Gain Stage 1 vs stock
     ├── Stage2_Gain.cpp               ← DC gain = –22; HPF corner 159 Hz (C7=100nF)
     ├── SW1SoftClip_Sine.cpp          ← MA856 symmetric soft clip; Vf ~0.82V onset
     ├── SW2HardClip_Sine.cpp          ← 1S1588 symmetric hard clip; Vf ~0.584V onset
@@ -133,7 +132,9 @@ WarningsAsErrors: ""
   +4.45→+18.22 dB monotonic. Accurate at base rate (−74 Hz @ 48k) — no oversampling/prewarp
   needed for the linear stages. An earlier ~−880 Hz error was an output-reconstruction bug
   (fixed: reconstruct V(NodeG) from passive ports, not the source port — see dsp.md).
-- Step 4b: Stage 1 Hi Gain — verify gain increase (~+4 dB target) vs standard mode
+- Step 4b: Stage 1 Hi Gain (fixed, Red only) — verify the Red channel's fixed Hi-Gain Stage 1
+  shows the gain increase (~+4 dB target) vs Yellow's stock Stage 1. Not a runtime toggle.
+  Blocked on topology (circuit.md Section 6); until pinned, Red uses the stock matrix as a fallback.
 - Step 4c: Stage 2 — ✅ PASS (2026-06-17). Inverting passband gain 21.90× (−22 target,
   R10/R9 = 220k/10k); HPF corner **159 Hz** exactly (C7=100nF, R9=10k); signed gain −21
   (inverting). Inversion via op-amp VCVS terminals (no PolarityInverterT); output off passive
@@ -146,10 +147,12 @@ WarningsAsErrors: ""
   symmetric, HARD clamp ±0.55V @ 1V in rising only to 0.66V @ 10V (diode-log; ~1.6 dB out per
   20 dB in). 1S1588 true antiparallel via always-present R12=1k. `tests/SW2HardClip_Sine.cpp`,
   dsp-validator PASS.
-- Step 6: All 8 mode combinations verified per channel (Boost/OD/Dist/Both × standard/HiGain).
+- Step 6: 4 clipping modes per channel (Boost/OD/Dist/Both) — Yellow on its stock Stage 1,
+  Red on its fixed Hi-Gain Stage 1. (Hi Gain is no longer a runtime axis, so there is no
+  8-combination matrix — 4 modes × 2 fixed-voicing channels.)
   **Boost mode must clip on the op-amp rails (≈±3.3V, soft knee) — not stay infinitely clean.**
   Diode modes must clip at the diode thresholds (≈±1.64V / ≈±0.584V), proving the rail
   saturation never engages there (tone-safe). See dsp.md "Op-amp Rail Saturation".
-- Step 7: Both channels in series — verify gain stacking, independent bypass, clipping interactions
+- Step 7: Yellow → Red in series — verify gain stacking, independent bypass, clipping interactions
 - Step 8: Oversampling — confirm 4x live / 8x render split; bypassed channel skips oversampler
 - Step 9: Full control sweep both channels, no instability, clicks, or NaN
