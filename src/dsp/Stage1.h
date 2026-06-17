@@ -34,10 +34,19 @@ namespace wdft = chowdsp::wdft;
 class Stage1
 {
 public:
-    static constexpr double R6_floor = 10.0e3;   // DRIVE floor resistor
+    static constexpr double R6_floor = 10.0e3;   // stock DRIVE floor resistor (matsumin R6)
     static constexpr double DRIVE_max = 100.0e3; // 100kB linear
 
-    Stage1() { setDrive (0.5); }
+    // Hi-Gain mod (Theseus SW1B + R3, fixed-on for the Red channel). The mod raises the
+    // Stage-1 feedback floor resistor (Z_upper leg), shifting the whole DRIVE range up —
+    // "the drive at 9 o'clock acts like it's at noon" (Analogman). On the real Theseus this
+    // is R2(100k) ∥ switchable R3(1k): stock ≈ R3 (~1k, clean), Hi-Gain removes R3 → R2=100k.
+    // The literal 100k floor is far hotter (~+13 dB) than the documented "subtle" hi-gain;
+    // this value is TUNED to the behavioural target (9-o'clock≈noon, ~+4 dB) on our matsumin
+    // base, and is the single knob for how hot Red is — raise toward 100k for more.
+    static constexpr double HiGain_floor = 39.0e3;
+
+    explicit Stage1 (bool hiGain = false) : floorR (hiGain ? HiGain_floor : R6_floor) { setDrive (0.5); }
 
     void prepare (double sampleRate)
     {
@@ -64,7 +73,7 @@ public:
     void setDrive (double drive01)
     {
         const auto rDrive = DRIVE_max * std::min (1.0, std::max (0.0, drive01));
-        driveR.setResistanceValue (R6_floor + rDrive); // propagates → R-type recomputes S
+        driveR.setResistanceValue (floorR + rDrive); // propagates → R-type recomputes S
     }
 
     /** Process one sample (Volts in → Volts out at NodeG). Stage 1 is linear. */
@@ -105,7 +114,9 @@ private:
     wdft::CapacitorT<double> c6 { 10.0e-9 };
     wdft::WDFSeriesT<double, decltype (r8), decltype (c6)> branch2 { r8, c6 }; // port c
     wdft::CapacitorT<double> c4 { 100.0e-12 };                                 // port d
-    wdft::ResistorT<double> driveR { R6_floor + 0.5 * DRIVE_max };             // port e (R6+DRIVE)
+    wdft::ResistorT<double> driveR { R6_floor + 0.5 * DRIVE_max };             // port e (floor+DRIVE)
+
+    double floorR; // stock R6_floor, or HiGain_floor for the Red channel (set in ctor)
 
     struct ImpedanceCalc
     {

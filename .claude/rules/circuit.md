@@ -384,14 +384,24 @@ Z_lower corners (~482/590 Hz, rising) and the Z_upper corner (~14.5–159 kHz, f
 
 **No PolarityInverterT** — Stage 1 is non-inverting.
 
-**Hi Gain mod — ⚠️ UNDER REVISION (topology), now FIXED to the Red channel only:**
+**Hi Gain mod — ✅ RESOLVED & IMPLEMENTED (Step 4b), FIXED to the Red channel only:**
 
-> **DESIGN DECISION 2026-06-17.** Hi Gain is a **fixed mod on the Red (second) channel
-> only** — not a runtime toggle on either channel. The Yellow channel is always stock. This
-> removes the per-channel `hi_gain_*` parameter and the runtime Stage-1 scattering swap; Red
-> simply constructs Stage 1 with the Hi-Gain matrix. The *topology* below is still unresolved
-> (see the discrepancy note), so until it is pinned, **Red's Stage 1 uses the stock voicing as
-> a fallback**. See Section 19.
+> **RESOLVED 2026-06-18.** Hi Gain is a **fixed mod on the Red (second) channel only** — not
+> a runtime toggle. Yellow is always stock. Topology pinned from the Theseus page-28 trace
+> (`crop_sw1b_big.png` / `crop_drivepot_big.png`): **SW1B switches R3(1k) in parallel with the
+> Stage-1 feedback floor resistor R2(100k)** in the Z_upper leg (NodeF → floor + DRIVE →
+> op-amp output). The mod **raises the effective Z_upper floor**, shifting the whole DRIVE
+> gain range UP — Analogman's "the drive at 9 o'clock acts like it's at noon." (Stock KOT runs
+> the low ~1k floor; Hi-Gain lifts it. The literal 100k floor is ~+13 dB hotter than the
+> documented subtle mod.)
+>
+> **Implementation:** a single floor-resistance change — `Stage1(bool hiGain)`, `HiGain_floor`
+> tuned to **39k** on our matsumin base (stock floor R6=10k). No switch is modelled (Red is
+> fixed). The R-type scattering matrix recomputes live from port impedances, so there is no
+> solver re-run and no `setSMatrixData()` swap. Validated `tests/Stage1_HiGain.cpp`: hotter at
+> every DRIVE position (+6.6→+1.7 dB), monotonic, Red@9:00 = 13.79 dB ≈ Yellow@noon = 13.90 dB
+> (−0.12 dB). dsp-validator PASS. The 39k is a behavioural tuning, not a literal trace — raise
+> toward 100k for a hotter Red if desired (single constant). See Section 19.
 
 > **DISCREPANCY FOUND 2026-06-16 (Theseus schematic, page 28 hi-res trace).** The model
 > below (R29 ∥ R8 in Z_lower Branch2) is **NOT what the Theseus schematic actually shows**
@@ -882,26 +892,18 @@ corrected 3-terminal-pot-tap topology and R-type WDF model. The 2026-06-16 These
 cross-reference (Section 2) **confirmed** the SW-1 soft-clip, SW-2 hard-clip, tone,
 presence, volume, and output topology by function-matching.
 
-**OPEN ITEM (reopened 2026-06-16): Stage-1 Hi-Gain wiring.** The Theseus cross-reference
-invalidated the prior "R29(22k) ∥ R8(27k) in Z_lower Branch2" model — R29/R27 are
-power-supply parts, and the real Hi-Gain element is SW1B switching R3(1k) in the Stage-1
-DRIVE feedback, but the exact wiring (which sub-net R3 modifies; gain direction/magnitude)
-is not yet pinned. matsumin (primary source) does not contain the mod. **Resolve before
-implementing Stage-1 Hi-Gain** via one of: a higher-resolution Theseus schematic, the AionFX
-Theseus gain-stage analysis, or KOT community Hi-Gain mod notes. See Section 6.
+**RESOLVED 2026-06-18: Stage-1 Hi-Gain wiring + implementation.** The prior "R29(22k) ∥
+R8(27k) in Z_lower Branch2" model was wrong (R29/R27 are power-supply). The real Hi-Gain
+element is **SW1B switching R3(1k) ∥ R2(100k) in the Stage-1 feedback floor** (Z_upper leg),
+confirmed from the Theseus page-28 trace (`crop_sw1b_big.png`, `crop_drivepot_big.png`). It
+**raises the Z_upper floor resistor**, shifting the DRIVE gain range up ("9 o'clock acts like
+noon"). Implemented as a fixed mod on the Red channel only — a single floor-resistance change
+(`Stage1(bool hiGain)`, `HiGain_floor=39k` tuned on the matsumin 10k base; live matrix
+recompute, no solver re-run, no runtime swap). Validated `tests/Stage1_HiGain.cpp`,
+dsp-validator PASS (Step 4b). See Section 6.
 
-> **SCOPE NARROWED 2026-06-17.** Hi Gain is now a **fixed mod applied to the Red channel
-> only** — it is no longer a runtime per-channel toggle (no `hi_gain_*` parameter, no
-> scattering-matrix swap at runtime). This does **not** resolve the topology open item above
-> (we still need the correct R3/SW1B wiring to build the Red channel's fixed Stage 1), but it
-> simplifies the architecture: Red's Stage 1 uses one fixed Hi-Gain scattering matrix chosen
-> at construction, Yellow's uses the stock one. Until the topology is confirmed, **Red's
-> Stage 1 falls back to the validated stock voicing** so the rest of the build proceeds; swap
-> in the Hi-Gain matrix once the wiring is pinned.
-
-**Implementation order** (Step 4): Stage1 (stock) → Stage2 → SW1SoftClip → SW2HardClip →
-ToneStage, then **Red-channel Stage-1 Hi-Gain (fixed, BLOCKED on topology)**. The Stage1
-(stock), Stage2, SW-1, SW-2, and Tone sections are finalized and ready. Hi-Gain is no longer
-on the critical path — it is a single fixed scattering matrix dropped into the Red channel's
-Stage 1 once its topology is confirmed; everything else (including the full Yellow channel and
-Red's stock-fallback) can be completed first.
+**No open circuit-topology items remain.** Implementation order (Step 4), all complete:
+Stage1 (stock) ✅ → Stage1 Hi-Gain (Red, fixed) ✅ → Stage2 ✅ → SW1SoftClip ✅ →
+SW2HardClip ✅ → ToneStage (next). The remaining `HiGain_floor=39k` value is a behavioural
+tuning rather than a literal component trace — revisit only if a hotter Red is wanted (raise
+toward the literal Theseus 100k) or a higher-res schematic pins an exact value.

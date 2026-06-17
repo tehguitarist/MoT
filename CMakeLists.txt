@@ -82,6 +82,19 @@ target_compile_options(Stage1_FreqResponse
         -Wall -Wextra
 )
 
+add_executable(Stage1_HiGain tests/Stage1_HiGain.cpp)
+
+target_link_libraries(Stage1_HiGain
+    PRIVATE
+        xsimd::xsimd
+        chowdsp::chowdsp_wdf
+)
+
+target_compile_options(Stage1_HiGain
+    PRIVATE
+        -Wall -Wextra
+)
+
 add_executable(Stage2_Gain tests/Stage2_Gain.cpp)
 
 target_link_libraries(Stage2_Gain

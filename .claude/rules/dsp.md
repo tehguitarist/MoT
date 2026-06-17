@@ -177,24 +177,30 @@ Each channel has independent APVTS parameters (e.g., `drive_yellow`, `drive_red`
 - ADAA in addition to oversampling, not instead
 - Reference: DAFx2020 "Antiderivative antialiasing in nonlinear wave digital filters"
 
-## Hi Gain Mod — FIXED on the Red channel (no runtime switch)
+## Hi Gain Mod — ✅ IMPLEMENTED, FIXED on the Red channel (no runtime switch)
 
-> **DESIGN DECISION 2026-06-17.** Hi Gain is a **fixed mod on the Red channel only**, chosen
-> at construction — **not** a runtime, per-channel `setSMatrixData()` swap driven by a
-> parameter. `MonarchChannel` takes a `bool hiGain` ctor arg: Yellow = `false` (stock Stage 1
-> matrix), Red = `true` (Hi-Gain Stage 1 matrix). Stage 1 picks its scattering matrix **once**
-> based on that flag. Consequences:
-> - **No** `hi_gain_*` APVTS parameter, **no** `pendingHiGainA/B` atomic, **no** per-block
->   Hi-Gain check in `processBlock`. (The SW-1/SW-2 *clipping-mode* swaps remain runtime.)
-> - Still precompute **both** Stage-1 matrices (stock + Hi-Gain) so Red can select Hi-Gain at
->   construction; just never switch at runtime.
-> - The **topology** of the Hi-Gain matrix is still unresolved (see below). Until pinned,
->   **Red selects the stock matrix as a fallback** — correct gain, just not yet hotter — so the
->   build proceeds. Swap in the real Hi-Gain matrix once the wiring is confirmed.
+> **RESOLVED & IMPLEMENTED 2026-06-18 (Step 4b, dsp-validator PASS).** Hi Gain is a **fixed
+> mod on the Red channel only**, chosen at construction — not a runtime swap. Topology pinned
+> from the Theseus page-28 trace: **SW1B switches R3(1k) ∥ R2(100k) in the Stage-1 feedback
+> floor**, i.e. it **raises the Z_upper floor resistor** (NodeF → floor + DRIVE → output),
+> shifting the whole DRIVE range up ("9 o'clock acts like noon").
 >
-> The code/notes below (the matrix derivation and the `setSMatrixData()` mechanism) still
-> describe how to *build* the Hi-Gain matrix; only the *trigger* changed from "runtime
-> parameter" to "fixed at construction for Red."
+> **It is NOT a scattering-matrix swap.** Because Stage1's R-type matrix recomputes live from
+> port impedances (`ImpedanceCalc` reads them on every impedance propagation), the mod is just
+> a different floor *resistance* — no precomputed second matrix, no `setSMatrixData()`, no
+> solver re-run. Implementation: `Stage1(bool hiGain)`; `floorR = hiGain ? HiGain_floor : R6_floor`;
+> `setDrive` uses `floorR + rDrive`. `MonarchChannel(bool hiGain)` forwards the flag (Yellow=false,
+> Red=true).
+> - **No** `hi_gain_*` APVTS parameter, **no** `pendingHiGain` atomic, **no** per-block Hi-Gain
+>   check. (The SW-1/SW-2 *clipping-mode* swaps remain runtime.)
+> - `HiGain_floor = 39k` is a **behavioural tuning** on the matsumin 10k base (the literal
+>   Theseus 100k floor is ~+13 dB, far hotter than the documented subtle mod). Raise toward
+>   100k for a hotter Red — single constant in `Stage1.h`.
+> - Validated `tests/Stage1_HiGain.cpp`: hotter at every DRIVE point (+6.6→+1.7 dB), monotonic,
+>   Red@9:00 = 13.79 dB ≈ Yellow@noon = 13.90 dB (−0.12 dB).
+>
+> The superseded matrix-derivation / `setSMatrixData()` notes below are retained only as the
+> record of the earlier (wrong) R29∥R8 approach — they do **not** describe the implementation.
 
 > **⚠️ UNDER REVISION 2026-06-16 — DO NOT IMPLEMENT THE CODE BELOW YET.** A hi-res trace of
 > the Theseus schematic (page 28) shows the previous "R29(22k) ∥ R8(27k) in Z_lower Branch2"

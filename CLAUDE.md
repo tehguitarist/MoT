@@ -79,12 +79,16 @@ chowdsp_wdf smoke test are both in place and verified.
      peak +13.93 dB @ 3780 Hz (96k; analog 3803 Hz, −23 Hz bilinear warp), DC shelf −0.08 dB,
      DRIVE +4.45→+18.22 dB monotonic. Accurate at base rate — no oversampling/prewarp needed
      (an output-reconstruction bug, since fixed, had caused a ~−880 Hz error). See `src/dsp/Stage1.h`.
-   - `Stage1` Hi Gain — now a **fixed mod on the Red channel only** (decision 2026-06-17), not
-     a runtime toggle. Topology still ⚠️ **under revision** (Theseus trace 2026-06-16): actual
-     element is SW1B switching R3=1k in the Stage-1 DRIVE feedback, NOT the old R29∥R8 Z_lower
-     model (R29/R27 are power-supply, not gain stage). Until pinned, **Red falls back to the
-     stock Stage-1 voicing** so the build proceeds. Confirm wiring before swapping in the
-     Hi-Gain matrix — see circuit.md Section 6.
+   - ✅ `Stage1` Hi Gain — **DONE & validated (dsp-validator PASS, Step 4b).** Fixed mod on the
+     **Red channel only** (decision 2026-06-17), not a runtime toggle. Topology RESOLVED via
+     Theseus page-28 hi-res trace: SW1B switches R3(1k) in parallel with the Stage-1 feedback
+     floor R2(100k) — i.e. the mod **raises the Z_upper floor resistor**, shifting the DRIVE
+     range up ("9 o'clock acts like noon"). Implemented as a single floor-resistance change
+     (`Stage1(bool hiGain)`, `HiGain_floor` tuned to 39k on our matsumin base — the literal
+     100k would be ~+13 dB, far hotter than the documented subtle mod). The R-type matrix
+     recomputes live from port impedances, so no solver re-run. `tests/Stage1_HiGain.cpp`:
+     hotter everywhere (+6.6→+1.7 dB), monotonic, Red@9:00=13.79 dB ≈ Yellow@noon=13.90 dB
+     (−0.12 dB). See `src/dsp/Stage1.h`.
    - ✅ `Stage2` (IC_B, inverting) — **DONE & validated (dsp-validator PASS).** Root R-type
      (op-amp VCVS), input C7(100nF)+R9(10k), feedback R10(220k). `tests/Stage2_Gain.cpp`:
      passband 21.90× (−22 target), −3 dB corner 159 Hz exactly, signed gain −21 (inverting).
@@ -125,7 +129,7 @@ chowdsp_wdf smoke test are both in place and verified.
 | Soft-clip diodes SW-1 | MA856 ×4 as `[D4+D5]∥[D2+D3]` back-to-back series strings ≡ ONE `DiodePairT` with n_eff=2×1.512≈3.024, Is=7.74e-13; in series with R11=6.8k, branch ∥ R10=220k, gated by SW-1 |
 | Hard-clip diodes SW-2 | 1S1588 ×2 true antiparallel pair; one `DiodePairT` shunt at node_HC, fed via R12=1k (always-present Stage 2 output R); Is=2.52e-9, n=1.752 |
 | Diode topology | **Symmetric pairs** — `DiodePairT` only, never `DiodeT` |
-| Hi Gain | **Fixed mod on the Red channel only** (not a runtime toggle; no `hi_gain_*` param). Yellow always stock. Topology ⚠️ **UNDER REVISION** — Theseus trace shows R29/R27 are power-supply (LED/VCC-filter), NOT gain stage; actual element = SW1B switching R3=1k in Stage-1 DRIVE feedback, exact wiring TBC (Red falls back to stock until pinned). See circuit.md Section 6. Do not implement the old R29∥R8 model. |
+| Hi Gain | **Fixed mod on the Red channel only** (not a runtime toggle; no `hi_gain_*` param). Yellow always stock. ✅ Implemented & validated (Step 4b): SW1B switches R3(1k) ∥ R2(100k) in the Stage-1 feedback floor → **raises Z_upper floor**, shifting DRIVE range up. Modelled as a single floor-resistance change, `HiGain_floor=39k` (tuned to "9-o'clock≈noon" on the matsumin 10k base; not the old R29∥R8 model). See circuit.md Section 6. |
 | Stage 1 feedback | Z_lower=(R7+C5)∥(R8+C6); Z_upper=C4∥(R6+DRIVE 0-100k); Av(s)=1+Zupper/Zlower |
 | DRIVE taper | 100kB **linear**; 2-terminal rheostat inside Stage 1 Z_upper only |
 | TONE taper | 25kB **linear**; 3-terminal pot tap (R-type adaptor at wiper) — see circuit.md Section 11 |

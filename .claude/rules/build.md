@@ -132,9 +132,12 @@ WarningsAsErrors: ""
   +4.45→+18.22 dB monotonic. Accurate at base rate (−74 Hz @ 48k) — no oversampling/prewarp
   needed for the linear stages. An earlier ~−880 Hz error was an output-reconstruction bug
   (fixed: reconstruct V(NodeG) from passive ports, not the source port — see dsp.md).
-- Step 4b: Stage 1 Hi Gain (fixed, Red only) — verify the Red channel's fixed Hi-Gain Stage 1
-  shows the gain increase (~+4 dB target) vs Yellow's stock Stage 1. Not a runtime toggle.
-  Blocked on topology (circuit.md Section 6); until pinned, Red uses the stock matrix as a fallback.
+- Step 4b: Stage 1 Hi Gain (fixed, Red only) — ✅ PASS (2026-06-18, dsp-validator). Topology
+  resolved (Theseus page-28: SW1B switches R3=1k ∥ R2=100k in the Stage-1 feedback floor →
+  raises Z_upper floor). Implemented as a single floor-resistance change, `HiGain_floor=39k`
+  (tuned on the matsumin 10k base). `tests/Stage1_HiGain.cpp`: hotter everywhere (+6.6→+1.7 dB
+  across DRIVE), monotonic, Red@9:00=13.79 dB ≈ Yellow@noon=13.90 dB (−0.12 dB, "9-o'clock acts
+  like noon"). Stock Stage 1 unchanged by the refactor. Not a runtime toggle.
 - Step 4c: Stage 2 — ✅ PASS (2026-06-17). Inverting passband gain 21.90× (−22 target,
   R10/R9 = 220k/10k); HPF corner **159 Hz** exactly (C7=100nF, R9=10k); signed gain −21
   (inverting). Inversion via op-amp VCVS terminals (no PolarityInverterT); output off passive
