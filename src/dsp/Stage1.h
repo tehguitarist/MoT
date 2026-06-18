@@ -34,16 +34,20 @@ namespace wdft = chowdsp::wdft;
 class Stage1
 {
 public:
-    static constexpr double R6_floor = 10.0e3;   // stock DRIVE floor resistor (matsumin R6)
+    // Yellow (stock) DRIVE floor resistor. matsumin labels R6 = 10k, but the Theseus trace of
+    // the real KOT stock floor is R2∥R3 ≈ 1k (Section 6) — i.e. a nearly-clean minimum. We use
+    // 1k here to err cautious / keep Yellow transparent at min drive (Av ≈ 1.07× ≈ +0.6 dB,
+    // vs +4.45 dB at 10k). Single constant; raise toward 10k for a hotter Yellow minimum.
+    static constexpr double R6_floor = 1.0e3;
     static constexpr double DRIVE_max = 100.0e3; // 100kB linear
 
     // Hi-Gain mod (Theseus SW1B + R3, fixed-on for the Red channel). The mod raises the
     // Stage-1 feedback floor resistor (Z_upper leg), shifting the whole DRIVE range up —
     // "the drive at 9 o'clock acts like it's at noon" (Analogman). On the real Theseus this
-    // is R2(100k) ∥ switchable R3(1k): stock ≈ R3 (~1k, clean), Hi-Gain removes R3 → R2=100k.
-    // The literal 100k floor is far hotter (~+13 dB) than the documented "subtle" hi-gain;
-    // this value is TUNED to the behavioural target (9-o'clock≈noon, ~+4 dB) on our matsumin
-    // base, and is the single knob for how hot Red is — raise toward 100k for more.
+    // is R2(100k) ∥ switchable R3(1k): stock ≈ R3 (~1k = our Yellow R6_floor), Hi-Gain removes
+    // R3 → R2 = 100k. The literal 100k is far hotter (~+13 dB) than the documented "subtle"
+    // hi-gain, so 39k is TUNED to the behavioural target: Red @ 9:00 ≈ Yellow @ noon (verified
+    // ±1 dB against the 1k Yellow floor). Single knob for how hot Red is — raise toward 100k.
     static constexpr double HiGain_floor = 39.0e3;
 
     explicit Stage1 (bool hiGain = false) : floorR (hiGain ? HiGain_floor : R6_floor) { setDrive (0.5); }

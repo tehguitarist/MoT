@@ -88,19 +88,21 @@ console app (headless editor→PNG; no display needed).
      network (C3/R4/R5 high-pass sub-filter) + root R-type op-amp gain stage (Z_lower =
      (R7+C5)∥(R8+C6), Z_upper = C4∥(R6+DRIVE)). Scattering matrix from `tools/r_solver_sympy.py`
      (validated sympy port of R-Solver) with ideal-op-amp limit. `tests/Stage1_FreqResponse.cpp`:
-     peak +13.93 dB @ 3780 Hz (96k; analog 3803 Hz, −23 Hz bilinear warp), DC shelf −0.08 dB,
-     DRIVE +4.45→+18.22 dB monotonic. Accurate at base rate — no oversampling/prewarp needed
-     (an output-reconstruction bug, since fixed, had caused a ~−880 Hz error). See `src/dsp/Stage1.h`.
+     peak +12.85 dB @ 4120 Hz (96k), DC shelf −0.20 dB, DRIVE +0.67→+17.60 dB monotonic.
+     Accurate at base rate — no oversampling/prewarp needed (an output-reconstruction bug, since
+     fixed, had caused a ~−880 Hz error). **Yellow DRIVE floor = 1k** (Theseus stock R2∥R3, a
+     nearly-clean min: +0.67 dB at drive 0); matsumin labels R6=10k but we use 1k to err cautious
+     / keep Yellow transparent (decision 2026-06-19). Single constant. See `src/dsp/Stage1.h`.
    - ✅ `Stage1` Hi Gain — **DONE & validated (dsp-validator PASS, Step 4b).** Fixed mod on the
      **Red channel only** (decision 2026-06-17), not a runtime toggle. Topology RESOLVED via
      Theseus page-28 hi-res trace: SW1B switches R3(1k) in parallel with the Stage-1 feedback
      floor R2(100k) — i.e. the mod **raises the Z_upper floor resistor**, shifting the DRIVE
      range up ("9 o'clock acts like noon"). Implemented as a single floor-resistance change
-     (`Stage1(bool hiGain)`, `HiGain_floor` tuned to 39k on our matsumin base — the literal
+     (`Stage1(bool hiGain)`, Red `HiGain_floor=39k` vs Yellow `R6_floor=1k` — the literal Theseus
      100k would be ~+13 dB, far hotter than the documented subtle mod). The R-type matrix
      recomputes live from port impedances, so no solver re-run. `tests/Stage1_HiGain.cpp`:
-     hotter everywhere (+6.6→+1.7 dB), monotonic, Red@9:00=13.79 dB ≈ Yellow@noon=13.90 dB
-     (−0.12 dB). See `src/dsp/Stage1.h`.
+     hotter everywhere (+10.4→+2.3 dB over Yellow's clean min), monotonic, Red@9:00=13.79 dB ≈
+     Yellow@noon=12.80 dB (+0.98 dB). See `src/dsp/Stage1.h`.
    - ✅ `Stage2` (IC_B, inverting) — **DONE & validated (dsp-validator PASS).** Root R-type
      (op-amp VCVS), input C7(100nF)+R9(10k), feedback R10(220k). `tests/Stage2_Gain.cpp`:
      passband 21.90× (−22 target), −3 dB corner 159 Hz exactly, signed gain −21 (inverting).
@@ -175,7 +177,8 @@ console app (headless editor→PNG; no display needed).
 | Channel routing | Yellow → Red in series; independently bypassable |
 | Channel names | Yellow (first, stock) → Red (second, fixed Hi-Gain), after the LED colours |
 | Default mode | Overdrive (SW-1 ON, SW-2 OFF) per channel |
-| Gain peak | **+13.93 dB @ 3780 Hz (96k)**, analog 3803 Hz (−23 Hz; −74 Hz @ 48k). Accurate at base rate — linear stages need no oversampling/prewarp (earlier large error was an output-recon bug, fixed; see dsp.md). |
+| Gain peak | **+12.85 dB @ 4120 Hz (96k, Yellow drive 0.5, floor 1k)**. Accurate at base rate — linear stages need no oversampling/prewarp (earlier large error was an output-recon bug, fixed; see dsp.md). |
+| DRIVE floor | Yellow **1k** (Theseus stock R2∥R3, nearly-clean min +0.67 dB); Red **39k** (Hi-Gain, min +11 dB). matsumin labels R6=10k — we use 1k for a cautious/transparent Yellow min. |
 | Oversampling live | 1x/2x/4x/8x; default **4x**; bypassed channels skip oversampler |
 | Oversampling render | 1x/2x/4x/8x; default **8x**; auto via `isNonRealtime()` |
 

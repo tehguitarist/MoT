@@ -256,7 +256,9 @@ See `circuit.md` for full table with schematic reference designators. Key values
 - R7 = 33k, C5 = 10nF (Stage 1 Z_lower Branch1: NodeF→GND, series)
 - R8 = 27k, C6 = 10nF (Stage 1 Z_lower Branch2: NodeF→GND, series; Hi Gain: R8→R8_eff≈12.17k)
 - C4 = 100pF (Stage 1 Z_upper: NodeF↔NodeG, parallel with R6+DRIVE)
-- R6 = 10k, DRIVE = 100kB (Stage 1 Z_upper: NodeF↔NodeG, series, in parallel with C4)
+- R6 = 10k (matsumin label), DRIVE = 100kB (Stage 1 Z_upper: NodeF↔NodeG, series, ∥ C4).
+  **Implemented floor: Yellow = 1k (Theseus stock R2∥R3, nearly-clean min), Red = 39k (Hi-Gain).**
+  See `Stage1.h` `R6_floor` / `HiGain_floor` (voicing decision 2026-06-19).
 - R9 = 10k (Stage 2 input resistor; Av = –R10/R9 = –22)
 - R10 = 220k (Stage 2 feedback resistor; always present)
 - R11 = 6.8k (SW-1 feedback branch series R, with diode network; branch ∥ R10, gated by SW-1)

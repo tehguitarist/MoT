@@ -131,17 +131,20 @@ WarningsAsErrors: ""
 
 - Step 2: AU and VST3 scan and load in a DAW
 - Step 3: RC lowpass smoke test — correct -3dB point
-- Step 4a: Stage 1 frequency response — ✅ PASS (2026-06-17). DC-servo shelf ≈ unity
-  (−0.08 dB), peak +13.93 dB @ 3780 Hz (96k; analog 3803 Hz, −23 Hz bilinear warp), DRIVE
-  +4.45→+18.22 dB monotonic. Accurate at base rate (−74 Hz @ 48k) — no oversampling/prewarp
-  needed for the linear stages. An earlier ~−880 Hz error was an output-reconstruction bug
-  (fixed: reconstruct V(NodeG) from passive ports, not the source port — see dsp.md).
+- Step 4a: Stage 1 frequency response — ✅ PASS (2026-06-17; re-measured 2026-06-19 after the
+  Yellow floor change). DC-servo shelf ≈ unity (−0.20 dB), peak +12.85 dB @ 4120 Hz (96k),
+  DRIVE +0.67→+17.60 dB monotonic. Accurate at base rate — no oversampling/prewarp needed for
+  the linear stages. An earlier ~−880 Hz error was an output-reconstruction bug (fixed:
+  reconstruct V(NodeG) from passive ports, not the source port — see dsp.md). **Yellow DRIVE
+  floor = 1k** (Theseus stock R2∥R3, nearly-clean min; matsumin labels R6=10k but we use 1k to
+  err cautious — decision 2026-06-19).
 - Step 4b: Stage 1 Hi Gain (fixed, Red only) — ✅ PASS (2026-06-18, dsp-validator). Topology
   resolved (Theseus page-28: SW1B switches R3=1k ∥ R2=100k in the Stage-1 feedback floor →
-  raises Z_upper floor). Implemented as a single floor-resistance change, `HiGain_floor=39k`
-  (tuned on the matsumin 10k base). `tests/Stage1_HiGain.cpp`: hotter everywhere (+6.6→+1.7 dB
-  across DRIVE), monotonic, Red@9:00=13.79 dB ≈ Yellow@noon=13.90 dB (−0.12 dB, "9-o'clock acts
-  like noon"). Stock Stage 1 unchanged by the refactor. Not a runtime toggle.
+  raises Z_upper floor). Implemented as a single floor-resistance change, Red `HiGain_floor=39k`
+  vs Yellow `R6_floor=1k`. `tests/Stage1_HiGain.cpp`: hotter everywhere (+10.4→+2.3 dB over
+  Yellow's clean min), monotonic, Red@9:00=13.79 dB ≈ Yellow@noon=12.80 dB (+0.98 dB, "9-o'clock
+  acts like noon"). Not a runtime toggle. (Re-measured 2026-06-19 after Yellow floor → 1k; the
+  39k Red value was kept — still hits the noon target against the cleaner Yellow.)
 - Step 4c: Stage 2 — ✅ PASS (2026-06-17). Inverting passband gain 21.90× (−22 target,
   R10/R9 = 220k/10k); HPF corner **159 Hz** exactly (C7=100nF, R9=10k); signed gain −21
   (inverting). Inversion via op-amp VCVS terminals (no PolarityInverterT); output off passive

@@ -113,6 +113,13 @@ preventing the gain from going to unity. When DRIVE=0: Z_upper_min = R6 = 10k.
 When DRIVE=max: Z_upper_max = R6 + 100k = 110k. The Stage 2 input resistor is R9 = 10k
 (a separate component). Both happen to be 10k but serve completely different functions.
 
+> **IMPLEMENTATION NOTE (voicing, 2026-06-19).** The **Yellow** channel uses a **1k** floor,
+> not the matsumin 10k. The Theseus trace of the real KOT stock floor is R2∥R3 ≈ 1k (Section 6),
+> which gives a nearly-clean minimum (Av ≈ +0.67 dB at DRIVE=0 vs +4.45 dB at 10k) — chosen to
+> keep Yellow transparent / err cautious. The **Red** (Hi-Gain) channel keeps its tuned **39k**
+> floor. Single constants `R6_floor` / `HiGain_floor` in `Stage1.h`; matsumin's literal 10k is
+> recorded here as the schematic value but is not what the model uses for Yellow.
+
 ### SW-1/SW-2 topology, R11/R12 roles, and Tone stage — CORRECTED 2026-06-16
 
 > Full re-trace of `king_of_tone_schematic.png` from IC_B pin 7 (output) through the
