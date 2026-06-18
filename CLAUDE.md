@@ -116,8 +116,17 @@ chowdsp_wdf smoke test are both in place and verified.
    −2.1 dB, DC divider matches to 0.01 dB. See `src/dsp/ToneStage.h`. **Contract:** VolumePot
    must NOT re-load node_T_out with the VOL body (already included here) — only the wiper
    audio-taper tap + C11/R14.
+   - ✅ `VolumePot` — **DONE & validated.** VOL 100kA audio-taper wiper tap (scalar; VOL body
+     load lives in ToneStage) + C11/R14 output HPF (0.16 Hz, WDF). `tests/VolumePot_Taper.cpp`:
+     0/−10/−20/−30/−40 dB exact. See `src/dsp/VolumePot.h`.
+   - ✅ `MonarchChannel` full chain — **DONE & validated (dsp-validator PASS, Step 7).** Wires
+     Stage1 → Stage2/SW1 → op-amp rail-sat (±3.3 V) → SW2 → Tone → Volume with clipping-mode
+     routing. `tests/FullChain_DualChannel.cpp`: all 4 modes both channels, clipping hierarchy
+     Boost>OD>Dist>Both, Boost on rails, Red hotter, Yellow→Red series stable, no NaN.
 7. **Oversampling + ADAA** on both clipping stages — verify aliasing reduction
-8. **Dual-channel integration** — Yellow→Red in series, independent bypass; Hi Gain fixed on Red
+8. **Dual-channel integration** — Yellow→Red in series, independent bypass; Hi Gain fixed on Red.
+   DSP chain done (`MonarchChannel`, validated). **Remaining:** APVTS-driven `processBlock`
+   (input/output trim calibration, per-channel bypass crossfade, meters) to make it audible.
 9. **UI implementation** — both channel panels (Yellow/Red, no Hi Gain toggle), oversampling controls
 10. **Final sweep** — all controls full range, no instability, clicks, or NaN output
 

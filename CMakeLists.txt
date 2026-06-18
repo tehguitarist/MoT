@@ -95,6 +95,32 @@ target_compile_options(Stage1_HiGain
         -Wall -Wextra
 )
 
+add_executable(VolumePot_Taper tests/VolumePot_Taper.cpp)
+
+target_link_libraries(VolumePot_Taper
+    PRIVATE
+        xsimd::xsimd
+        chowdsp::chowdsp_wdf
+)
+
+target_compile_options(VolumePot_Taper
+    PRIVATE
+        -Wall -Wextra
+)
+
+add_executable(FullChain_DualChannel tests/FullChain_DualChannel.cpp)
+
+target_link_libraries(FullChain_DualChannel
+    PRIVATE
+        xsimd::xsimd
+        chowdsp::chowdsp_wdf
+)
+
+target_compile_options(FullChain_DualChannel
+    PRIVATE
+        -Wall -Wextra
+)
+
 add_executable(ToneStage_FreqResponse tests/ToneStage_FreqResponse.cpp)
 
 target_link_libraries(ToneStage_FreqResponse

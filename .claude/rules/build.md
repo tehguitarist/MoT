@@ -164,6 +164,19 @@ WarningsAsErrors: ""
   **Boost mode must clip on the op-amp rails (≈±3.3V, soft knee) — not stay infinitely clean.**
   Diode modes must clip at the diode thresholds (≈±1.64V / ≈±0.584V), proving the rail
   saturation never engages there (tone-safe). See dsp.md "Op-amp Rail Saturation".
-- Step 7: Yellow → Red in series — verify gain stacking, independent bypass, clipping interactions
+- VolumePot: ✅ PASS (2026-06-18, dsp-validator). VOL 100kA AUDIO taper wiper tap
+  (pow(10,2x−2), scalar — node_T_out already carries the VOL-body load from ToneStage) + C11/R14
+  output HPF (0.16 Hz, passive WDF). `tests/VolumePot_Taper.cpp`: 0/−10/−20/−30/−40 dB exact,
+  passband flat, no NaN.
+- Step 7: Yellow → Red in series — ✅ PASS (2026-06-18, dsp-validator). `MonarchChannel` wires the
+  full chain (Stage1 → Stage2/SW1 → rail-sat → SW2 → Tone → Volume) with clipping-mode routing
+  (0..3 → SW1/SW2) and op-amp rail saturation (±3.3 V soft knee, linear below ±3.0 V). Rail-sat
+  is load-bearing in Boost (always) and Distortion (linear Stage2 ×−22 → ~13.9 V clamped before
+  the hard-clip shunt), tone-safe for the feedback soft-clip at normal drive.
+  `tests/FullChain_DualChannel.cpp`: clipping hierarchy Boost 2.76 > OD 1.41 > Dist 0.52 > Both
+  0.48 V (vin 0.3 Vpk, drive 0.7); Boost rail-bounded; Red hotter than Yellow; Yellow→Red series
+  finite/stable; no NaN. Accepted approximations (quantified negligible): SW-2-OFF drops R12=1k
+  (−0.08 dB flat), ideal voltage-out cascade. Remaining for Step 7/8: APVTS-driven processBlock
+  wiring (input/output trim calibration, bypass crossfade, meters) + oversampling.
 - Step 8: Oversampling — confirm 4x live / 8x render split; bypassed channel skips oversampler
 - Step 9: Full control sweep both channels, no instability, clicks, or NaN

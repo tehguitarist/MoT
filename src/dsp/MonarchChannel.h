@@ -1,30 +1,116 @@
 #pragma once
 
+#include <algorithm>
+#include <cmath>
+
+#include "Stage1.h"
+#include "Stage2.h"
+#include "SW1SoftClip.h"
+#include "SW2HardClip.h"
+#include "ToneStage.h"
+#include "VolumePot.h"
+
 namespace monarch
 {
 
-/** Stub for a single King of Tone channel's DSP chain. WDF implementation begins at Step 4.
-
-    @param hiGain  Selects the Stage 1 voicing baked into this channel. The Theseus Hi-Gain
-                   mod is a FIXED build option here, not a runtime toggle: the Yellow channel
-                   is constructed with hiGain=false (stock), the Red channel with hiGain=true.
-                   Stage 1 will use this to pick the corresponding fixed scattering matrix once
-                   the Hi-Gain topology is implemented (circuit.md Section 6). */
+/**
+ * A single King of Tone channel (Yellow or Red), full DSP chain.
+ *
+ * Signal path (circuit.md Section 13):
+ *   in → Stage1 (IC_A, non-inv; incl. input network; fixed Hi-Gain on Red) → V(NodeG)
+ *      → Stage2 (IC_B, inv ×−22)   — SW-1 OFF: stock Stage2; SW-1 ON: SW1SoftClip (soft clip)
+ *      → op-amp rail saturation (±3.3 V soft knee). Models the JRC4580 output ceiling. It is
+ *        load-bearing wherever the op-amp swing would exceed the rails: ALWAYS in Boost (no
+ *        diodes) and in Distortion (the linear Stage2 ×−22 path reaches ~13.9 V before the
+ *        hard-clip shunt), and at extreme drive in OD/Both. Tone-safe at normal levels: the
+ *        feedback soft-clip (OD/Both) holds pin7 well below ±3 V, so the knee passes it
+ *        unchanged there; it only ever clamps a swing the real op-amp would also clamp.
+ *      → R12/node_HC            — SW-2 OFF: pass-through (R12 loading minor, circuit.md §10);
+ *                                 SW-2 ON: SW2HardClip (R12 + 1S1588 shunt, hard clip)
+ *      → ToneStage (passive TONE/Presence) → VolumePot (audio taper + C11/R14) → out
+ *
+ * Clipping mode (architecture.md): 0 Boost(—/—), 1 Overdrive(SW1/—), 2 Distortion(—/SW2),
+ * 3 Both(SW1/SW2). Hi Gain is fixed per channel (ctor flag → Stage1), not a runtime mode.
+ */
 class MonarchChannel
 {
 public:
-    explicit MonarchChannel (bool hiGain = false) : hiGainStage1 (hiGain) {}
+    // ±3.3 V op-amp output ceiling around BIAS (JRC4580 on a 9 V rail) — circuit.md §4, dsp.md.
+    static constexpr double railV = 3.3;
+    static constexpr double railKnee = 3.0; // linear below the knee → diode modes untouched
 
-    void prepare (double /*sampleRate*/, int /*samplesPerBlock*/) {}
+    explicit MonarchChannel (bool hiGain = false) : stage1 (hiGain), hiGainStage1 (hiGain) {}
 
-    void reset() {}
-
-    float process (float input)
+    void prepare (double sampleRate, int /*samplesPerBlock*/)
     {
-        return input;
+        stage1.prepare (sampleRate);
+        stage2.prepare (sampleRate);
+        sw1.prepare (sampleRate);
+        sw2.prepare (sampleRate);
+        tone.prepare (sampleRate);
+        volume.prepare (sampleRate);
     }
 
+    void reset()
+    {
+        stage1.reset();
+        stage2.reset();
+        sw1.reset();
+        sw2.reset();
+        tone.reset();
+        volume.reset();
+    }
+
+    // ---- Parameter setters (call per block; tapers applied inside each stage) ----
+    void setDrive (double d) { stage1.setDrive (d); }
+    void setTone (double t) { tone.setTone (t); }
+    void setPresence (double p) { tone.setPresence (p); }
+    void setVolume (double v) { volume.setVolume (v); }
+
+    /** Clipping mode 0..3 (Boost/Overdrive/Distortion/Both → SW-1/SW-2 on/off). */
+    void setClippingMode (int mode)
+    {
+        sw1On = (mode == 1 || mode == 3);
+        sw2On = (mode == 2 || mode == 3);
+    }
+
+    /** Process one sample (absolute circuit volts in → out). */
+    inline double processSample (double x) noexcept
+    {
+        const double nodeG = stage1.processSample (x);
+        double pin7 = sw1On ? sw1.processSample (nodeG) : stage2.processSample (nodeG);
+        pin7 = railSaturate (pin7); // op-amp output ceiling (Boost always; Distortion via linear Stage2)
+        const double nodeHC = sw2On ? sw2.processSample (pin7) : pin7;
+        const double tOut = tone.processSample (nodeHC);
+        return volume.processSample (tOut);
+    }
+
+    bool isHiGain() const { return hiGainStage1; }
+
 private:
+    // Soft op-amp rail saturation: linear below ±railKnee, gentle tanh knee approaching ±railV.
+    // Below the knee the signal passes UNCHANGED, so it never colours the feedback soft-clip's
+    // sub-3 V output at normal drive. It clamps only swings the real op-amp would also clamp:
+    // Boost (no diodes) and Distortion's linear-Stage2 ×−22 path always, OD/Both at extreme drive.
+    static inline double railSaturate (double v) noexcept
+    {
+        const double a = std::abs (v);
+        if (a <= railKnee)
+            return v;
+        const double over = (a - railKnee) / (railV - railKnee);
+        const double clamped = railKnee + (railV - railKnee) * std::tanh (over);
+        return std::copysign (clamped, v);
+    }
+
+    Stage1 stage1;     // includes the fixed Hi-Gain selection for Red
+    Stage2 stage2;     // stock inverting Stage 2 (SW-1 OFF path)
+    SW1SoftClip sw1;   // Stage 2 with soft-clip diodes (SW-1 ON path)
+    SW2HardClip sw2;   // R12 + 1S1588 hard-clip shunt (SW-2 ON path)
+    ToneStage tone;
+    VolumePot volume;
+
+    bool sw1On { true };  // default Overdrive (SW-1 ON, SW-2 OFF)
+    bool sw2On { false };
     bool hiGainStage1 { false };
 };
 
