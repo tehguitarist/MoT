@@ -23,9 +23,10 @@ private:
     void refreshFonts (float sc);
     void showScaleMenu();
 
-    // Base (1x) window size. The pedal face is the placeholder centre (~1.7:1); the side
-    // panels (trim + VU) and the oversampling strip are the "peripheral" shared-look elements.
-    static constexpr int kBaseW = 694;
+    // Base (1x) window size. The pedal face is the centre; the side panels (trim + VU) and the
+    // oversampling strip are the "peripheral" shared-look elements. kBaseW dropped 694→592 so the
+    // pedal face is 20% narrower (510→408) with the fixed-width side panels unchanged.
+    static constexpr int kBaseW = 592;
     static constexpr int kBaseH = 354;
 
     MonarchAudioProcessor& audioProcessor;

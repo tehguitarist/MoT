@@ -22,12 +22,19 @@ public:
         }
     }
 
+    /** Lit colour for this LED (e.g. yellow for the Yellow channel, red for Red). */
+    void setOnColour (juce::Colour c)
+    {
+        onColour = c;
+        repaint();
+    }
+
     void paint (juce::Graphics& g) override
     {
         const auto b = getLocalBounds().toFloat();
         const float cx = b.getCentreX(), cy = b.getCentreY();
         const float coreR = juce::jmin (b.getWidth(), b.getHeight()) * 0.32f;
-        const juce::Colour core = on ? juce::Colour (0xFF00DD55u) : juce::Colour (0xFF091A09u);
+        const juce::Colour core = on ? onColour : onColour.withMultipliedSaturation (0.7f).withBrightness (0.10f);
 
         // Soft radial glow (only when lit).
         if (on)
@@ -51,6 +58,7 @@ public:
 
 private:
     bool on { true };
+    juce::Colour onColour { 0xFF00DD55u };
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (LEDIndicator)
 };

@@ -12,7 +12,7 @@
 >   driven by the editor timer) and `LEDIndicator.h` (green core + glow, read bypass param).
 > - `PluginEditor.{h,cpp}` — Input/Output side panels (trim halo + TRIM label + VU), the
 >   oversampling strip (LIVE/RENDER combos bound to `oversampling_realtime`/`oversampling_render`
->   + UI-size scale button), and the **resizable, aspect-locked** window (base 694×354, 0.5–2.5×)
+>   + UI-size scale button), and the **resizable, aspect-locked** window (base 592×354, 0.5–2.5×)
 >   with per-session (APVTS `uiScale`) + cross-session (`ApplicationProperties` `defaultScale`)
 >   scale persistence. `refreshFonts(sc)` rescales every label font in `resized()`.
 >

@@ -62,7 +62,7 @@ oversampling — Step 7/8). **The UI is now complete:**
   knob + OS combo boxes + bypass footswitch + scaling button font), `VUMeter`, `LEDIndicator`,
   Input/Output side panels (trim halo + TRIM + VU), the oversampling strip (LIVE/RENDER combos
   bound to `oversampling_realtime`/`oversampling_render` + UI-size scale button), and a
-  resizable/aspect-locked window (base 694×354, 0.5–2.5×) with per-session (APVTS `uiScale`) +
+  resizable/aspect-locked window (base 592×354, 0.5–2.5×) with per-session (APVTS `uiScale`) +
   cross-session (`ApplicationProperties` `defaultScale`) persistence.
 - **Pedal face (`PedalFace`):** royal-purple body (`#6A0956`, lit gradient) with gold (`#C6A15B`)
   Papyrus lettering + gold compass rose (ref `pedal_picture.png`). Per channel: Volume/Drive/Tone
