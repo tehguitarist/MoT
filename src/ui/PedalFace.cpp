@@ -175,20 +175,20 @@ void PedalFace::resized()
     placeLabel (presYL, presX, compCy, presD, 0.85f);
     placeLabel (presRL, W - presX, compCy, presD, 0.85f);
 
-    // 3-way clip switches at the left/right edges (raised up).
+    // 3-way clip switches at the left/right edges (raised up more).
     const float clipW = W * 0.12f, clipH = H * 0.20f;
-    place (clipY, W * 0.085f, H * 0.55f, clipW, clipH);
-    place (clipR, W * 0.915f, H * 0.55f, clipW, clipH);
+    place (clipY, W * 0.085f, H * 0.49f, clipW, clipH);
+    place (clipR, W * 0.915f, H * 0.49f, clipW, clipH);
 
-    // LEDs, then the (large) logo, then the footswitches — all raised up.
+    // LEDs, then the (large) logo, then the footswitches.
     const float ledBox = jmin (W, H) * 0.055f;
-    place (ledY, W * 0.40f, H * 0.61f, ledBox, ledBox);
-    place (ledR, W * 0.60f, H * 0.61f, ledBox, ledBox);
+    place (ledY, W * 0.40f, H * 0.62f, ledBox, ledBox);
+    place (ledR, W * 0.60f, H * 0.62f, ledBox, ledBox);
 
-    place (logoL, W * 0.5f, H * 0.70f, W * 0.94f, H * 0.16f);
+    place (logoL, W * 0.5f, H * 0.73f, W * 0.94f, H * 0.16f);
 
     const float fsD = jmin (W * 0.12f, H * 0.17f);
-    const float fsY = H * 0.83f;
+    const float fsY = H * 0.875f;
     place (bypassY, W * 0.27f, fsY, fsD, fsD);
     place (bypassR, W * 0.73f, fsY, fsD, fsD);
     place (bypassYL, W * 0.27f, fsY + fsD * 0.60f, fsD * 1.7f, labH);
