@@ -39,6 +39,35 @@ public:
     static constexpr double railV = 3.3;
     static constexpr double railKnee = 3.0; // linear below the knee → diode modes untouched
 
+    // ---- Even-harmonic match (capture A/B, 2026-06-20) -------------------------------------
+    // The KOT clips symmetrically BY DESIGN, so the ideal WDF model makes only odd harmonics.
+    // The real-pedal captures show a consistent 2nd harmonic (H2) the model lacks — a junction-
+    // charge / op-amp-asymmetry behaviour. We proved it can't be reproduced by a circuit-accurate
+    // DC offset: the feedback soft-clip (OD) and hard shunt (Dist) structurally reject internal
+    // biasing (an offset shifts clamp LEVELS → equal duty → DC, blocked downstream), and even
+    // harmonics REQUIRE duty-cycle asymmetry. So — like the capture-match tilt shelf — we inject
+    // H2 directly at the clip output, keyed to a clipping-depth envelope so it tracks the
+    // captures' H2-vs-level across drive / input level / mode:
+    //   • OD / Distortion: H2 GROWS with clipping depth → coeff scales with clipEnv.
+    //   • Boost: H2 ~level-independent once the rails clip → coeff saturates (tanh of clipEnv).
+    // Injected as +k·(x² − ⟨x²⟩): x² is the even (H2) part; subtracting the running mean keeps it
+    // DC-free. Sign of k sets the asymmetry direction (negative = OD/Dist, positive = Boost).
+    static constexpr double asymOD = -0.38;    // OD even-harmonic mix coeff
+    static constexpr double asymDist = -0.13;  // Distortion mix coeff
+    static constexpr double asymBoost = 0.35;  // Boost mix coeff (modest; Boost's true trend is the
+                                               // opposite — H2 falls with level via the op-amp DC
+                                               // offset — which this topology resists, so we settle
+                                               // for a moderate, level-independent warmth)
+    static constexpr double asymThresh = 0.45; // clipEnv ignores drive below this (clean stays clean)
+    static constexpr double asymDriveScale = 1.20; // sets where the H2 source saturates → the drive
+                                                   // at which H2 peaks (it washes out above, matching
+                                                   // the captures' non-monotonic H2-vs-gain: peak
+                                                   // ~noon, lower at max drive)
+    static constexpr double asymTauSeconds = 0.005;     // clip-depth envelope (gate) time constant
+    static constexpr double asymMeanTauSeconds = 0.050; // DC-removal time constant — must be SLOW so
+                                                        // it tracks only DC and preserves low-frequency
+                                                        // even harmonics (a fast mean cancels them)
+
     explicit MonarchChannel (bool hiGain = false) : stage1 (hiGain), hiGainStage1 (hiGain) {}
 
     // The linear stages run at the base rate; the nonlinear clip span (Stage2/SW1 + rail-sat
@@ -57,6 +86,10 @@ public:
         stage2.prepare (clipRate);
         sw1.prepare (clipRate);
         sw2.prepare (clipRate);
+        asymCoeff = std::exp (-1.0 / (asymTauSeconds * clipRate));      // fast: clip-depth gate
+        meanCoeff = std::exp (-1.0 / (asymMeanTauSeconds * clipRate));  // slow: DC removal only
+        clipEnv = 0.0;
+        meanSq = 0.0;
     }
 
     void prepare (double sampleRate, int /*samplesPerBlock*/ = 0)
@@ -99,7 +132,8 @@ public:
     {
         double pin7 = sw1On ? sw1.processSample (nodeG) : stage2.processSample (nodeG);
         pin7 = railSaturate (pin7); // op-amp output ceiling (Boost always; Distortion via linear Stage2)
-        return sw2On ? sw2.processSample (pin7) : pin7;
+        const double hc = sw2On ? sw2.processSample (pin7) : pin7;
+        return injectEvenHarmonic (hc, nodeG);
     }
 
     // Base-rate back: Tone → Volume → output.
@@ -128,6 +162,28 @@ private:
         return std::copysign (clamped, v);
     }
 
+    // Even-harmonic injection at the clip output (see the asym* constants). `x` = clip output
+    // (node_HC), `nodeG` = clip-span input (drive level). A clipping-depth envelope gates/scales
+    // the H2 so clean playing stays symmetric and the level-trend matches the captures.
+    inline double injectEvenHarmonic (double x, double nodeG) noexcept
+    {
+        const double over = std::max (0.0, std::abs (nodeG) - asymThresh);
+        clipEnv = asymCoeff * clipEnv + (1.0 - asymCoeff) * over;
+
+        // The clip outputs are ~50%-duty squares (hard shunt / rails) or a soft-squaring knee
+        // (OD) — neither has even harmonics a memoryless shaper can pull out at high drive. So
+        // source the H2 from a BOUNDED soft-saturation of the pre-clip drive: tanh(nodeG·s) has a
+        // clean 2f component at moderate drive but SQUARES UP at high drive (losing its own even
+        // harmonics) — reproducing the captures' wash-out (H2 peaks ~noon, falls at max drive).
+        // A clip-depth gate keeps clean playing symmetric; ⟨soft²⟩ is subtracted to stay DC-free.
+        const double gate = std::tanh (4.0 * clipEnv);
+        const double soft = std::tanh (asymDriveScale * nodeG);
+        const double k = (sw1On ? asymOD : (sw2On ? asymDist : asymBoost)) * gate;
+
+        meanSq = meanCoeff * meanSq + (1.0 - meanCoeff) * soft * soft;
+        return x + k * (soft * soft - meanSq); // +k·(even part) — DC-free 2f injection
+    }
+
     Stage1 stage1;     // includes the fixed Hi-Gain selection for Red
     Stage2 stage2;     // stock inverting Stage 2 (SW-1 OFF path)
     SW1SoftClip sw1;   // Stage 2 with soft-clip diodes (SW-1 ON path)
@@ -138,6 +194,11 @@ private:
     bool sw1On { true };  // default Overdrive (SW-1 ON, SW-2 OFF)
     bool sw2On { false };
     bool hiGainStage1 { false };
+
+    double clipEnv { 0.0 };   // clipping-depth envelope (gates the even-harmonic coeff)
+    double meanSq { 0.0 };    // slow ⟨soft²⟩ (removes only DC from the H2 injection)
+    double asymCoeff { 0.0 }; // fast envelope smoothing (clip-depth gate)
+    double meanCoeff { 0.0 }; // slow envelope smoothing (DC removal)
 };
 
 } // namespace monarch
