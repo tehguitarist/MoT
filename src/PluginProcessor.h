@@ -1,6 +1,8 @@
 #pragma once
 
 #include <array>
+#include <cmath>
+#include <complex>
 #include <memory>
 
 #include <juce_audio_processors/juce_audio_processors.h>
@@ -62,6 +64,70 @@ private:
     // This sets the diode/rail thresholds at the input levels the capture used; verified against
     // the clean onset + OD/Dist THD. Input/output trim (±12 dB) trims around it.
     static constexpr float circuitVoltsPerFS = 0.66f;
+
+    // ---- Capture-match calibration (first-order high-shelf / "tilt") ----------------------
+    // A/B vs the NAM captures of the real King of Tone showed a clean, GAIN-INVARIANT tilt
+    // pivoting at ~1 kHz: the captures are ~+2 dB brighter above 1 kHz and ~1.7 dB lower in the
+    // low-mids than our (schematic-faithful) model. The tilt has the SAME shape at every gain
+    // and input level (verified G2 ≈ G4 on the clean sweep) and is linear — i.e. it is a
+    // post-pedal artifact of the capture chain (reamp + interface ADC), NOT a circuit feature,
+    // which is why no R-C in the verified netlist produces it. Because it is fixed and linear,
+    // one shelf matches it across every scenario (clean/OD/Dist, hot/cold input, any drive).
+    // We keep all circuit component values at their verified schematic values and correct the
+    // capture chain here instead — the EQ analog of the circuitVoltsPerFS level calibration.
+    // Normalized to unity at 1 kHz so it leaves the level calibration untouched. Fit: −2.6 dB
+    // LF / +1.4 dB HF asymptotes, pivot 1.4 kHz → matches the measured tilt to ~0.4 dB RMS.
+    // Set kEnabled=false to A/B the pure-circuit model. (decision 2026-06-20)
+    struct TiltShelf
+    {
+        static constexpr bool kEnabled = true;
+        static constexpr double kGloDb = -2.6;    // LF asymptote (dB)
+        static constexpr double kGhiDb = 1.4;     // HF asymptote (dB)
+        static constexpr double kPivotHz = 1400.0; // geometric centre of the zero/pole
+
+        double b0 { 1.0 }, b1 { 0.0 }, a1 { 0.0 };
+        std::array<double, 2> x1 {}, y1 {};
+
+        void prepare (double fs)
+        {
+            constexpr double pi = juce::MathConstants<double>::pi;
+            const double Glo = std::pow (10.0, kGloDb / 20.0);
+            const double Ghi = std::pow (10.0, kGhiDb / 20.0);
+            const double fz = kPivotHz * std::sqrt (Glo / Ghi);
+            const double fp = kPivotHz * std::sqrt (Ghi / Glo);
+            const double K = 2.0 * fs;
+            const double wz = K * std::tan (pi * fz / fs); // prewarped zero
+            const double wp = K * std::tan (pi * fp / fs); // prewarped pole
+            const double a0 = K + wp;
+            a1 = (wp - K) / a0;
+            double nb0 = Ghi * (K + wz) / a0;
+            double nb1 = Ghi * (wz - K) / a0;
+            // Normalize to unity at 1 kHz (preserve the overall level / circuitVoltsPerFS cal).
+            const double w1 = 2.0 * pi * 1000.0 / fs;
+            const std::complex<double> z = std::exp (std::complex<double> (0.0, -w1));
+            const double scale = 1.0 / std::abs ((nb0 + nb1 * z) / (1.0 + a1 * z));
+            b0 = nb0 * scale;
+            b1 = nb1 * scale;
+            reset();
+        }
+
+        void reset()
+        {
+            x1 = {};
+            y1 = {};
+        }
+
+        inline float process (int ch, float in) noexcept
+        {
+            const double x = (double) in;
+            const double y = b0 * x + b1 * x1[(size_t) ch] - a1 * y1[(size_t) ch];
+            x1[(size_t) ch] = x;
+            y1[(size_t) ch] = y;
+            return (float) y;
+        }
+    };
+    TiltShelf tilt;
+    juce::SmoothedValue<float> shelfMix; // 1 = shelf engaged, 0 = true-bypass (dry, no shelf)
 
     // One dual-mono pedal per audio channel (index 0 = L, 1 = R). Each strip is the full
     // Yellow → Red series chain; both strips share the same knob settings. Hi Gain is fixed

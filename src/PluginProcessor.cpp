@@ -155,6 +155,10 @@ void MonarchAudioProcessor::prepareToPlay (double sampleRate, int samplesPerBloc
         s.wetRed.setCurrentAndTargetValue (pRed.bypass->load() > 0.5f ? 0.0f : 1.0f);
     }
 
+    tilt.prepare (sampleRate);
+    shelfMix.reset (sampleRate, bypassRampSeconds);
+    shelfMix.setCurrentAndTargetValue (1.0f);
+
     // Force a (re)build of the clip-span oversamplers + prepareClip on the first block.
     activeLog2 = -1;
     activeNumChannels = 0;
@@ -350,6 +354,36 @@ void MonarchAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce
     // Series: Yellow → Red (each with its own clip-span oversampler).
     processPedalChannel (buffer, numChannels, numSamples, /*isYellow*/ true, osYellow.get());
     processPedalChannel (buffer, numChannels, numSamples, /*isYellow*/ false, osRed.get());
+
+    // Capture-match calibration shelf (see PluginProcessor.h::TiltShelf). Applied once, post-
+    // pedal, in circuit volts. Crossfaded out when BOTH channels are fully bypassed so true
+    // bypass stays dry (the shelf models the capture chain, not the pedal). The filter runs
+    // every sample regardless of the gate so its state stays warm (click-free re-engage).
+    if (TiltShelf::kEnabled)
+    {
+        bool pedalActive = false;
+        for (auto& s : strips)
+        {
+            auto live = [] (juce::SmoothedValue<float>& sm) {
+                return sm.isSmoothing() || sm.getTargetValue() > 0.0f;
+            };
+            if (live (s.wetYellow) || live (s.wetRed))
+                pedalActive = true;
+        }
+        shelfMix.setTargetValue (pedalActive ? 1.0f : 0.0f);
+
+        for (int n = 0; n < numSamples; ++n)
+        {
+            const float g = shelfMix.getNextValue();
+            for (int ch = 0; ch < numChannels; ++ch)
+            {
+                float* data = buffer.getWritePointer (ch);
+                const float dry = data[n];
+                const float wet = tilt.process (ch, dry);
+                data[n] = dry + g * (wet - dry);
+            }
+        }
+    }
 
     // Output trim; capture output meter (post-trim).
     for (int ch = 0; ch < numChannels; ++ch)

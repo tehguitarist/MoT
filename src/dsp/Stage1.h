@@ -34,11 +34,12 @@ namespace wdft = chowdsp::wdft;
 class Stage1
 {
 public:
-    // Yellow (stock) DRIVE floor resistor. matsumin labels R6 = 10k, but the Theseus trace of
-    // the real KOT stock floor is R2∥R3 ≈ 1k (Section 6) — i.e. a nearly-clean minimum. We use
-    // 1k here to err cautious / keep Yellow transparent at min drive (Av ≈ 1.07× ≈ +0.6 dB,
-    // vs +4.45 dB at 10k). Single constant; raise toward 10k for a hotter Yellow minimum.
-    static constexpr double R6_floor = 1.0e3;
+    // Yellow (stock) DRIVE floor resistor = matsumin R6 = 10k. (The Theseus trace shows a
+    // stock R2∥R3 ≈ 1k nearly-clean minimum; we briefly used 1k to err cautious, but A/B vs the
+    // real-pedal NAM captures showed 10k matches the captured low-mid response ~1 dB better —
+    // 1k under-boosts 200–500 Hz. Reverted to the matsumin 10k value, decision 2026-06-20.)
+    // Av ≈ +4.45 dB at min drive. Single constant; lower toward 1k for a cleaner Yellow minimum.
+    static constexpr double R6_floor = 10.0e3;
     static constexpr double DRIVE_max = 100.0e3; // 100kB linear
 
     // Hi-Gain mod (Theseus SW1B + R3, fixed-on for the Red channel). The mod raises the
