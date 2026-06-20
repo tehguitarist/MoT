@@ -32,7 +32,7 @@
 ## Layout — Two-Channel Pedal Face
 
 Reference: `pedal_picture.png` (project root) — **royal purple** enclosure (`#6A0956`), **gold**
-lettering in **Papyrus** font (`#C6A15B`), gold compass rose centre, black knurled knobs
+lettering in **Papyrus** font (`#C6A15B`), gold compass rose centre, black knobs
 (`#161019`) with white indicators, chrome footswitches with off-white rings (`#DBDCD5`). The
 "ANALOG.MAN" wording is omitted. (Supersedes the earlier white-enclosure reference.)
 **Clipping switches (3-way): toward the left & right edges, below the knobs, above the footswitches.**
@@ -70,7 +70,7 @@ communicate that it is the higher-gain voice — purely cosmetic, not a control.
 - Labels: "Volume", "Drive", "Tone" (same on both channels; distinguished by Yellow/Red column)
 - Drive and Tone: linear taper — applied in DSP, not UI
 - Volume: audio taper — applied in DSP, not UI
-- Style: large black knurled knobs with white indicator line (reference KOT photo)
+- Style: large black knobs with white indicator line (reference KOT photo)
 - JUCE `Slider` (rotary) + custom LookAndFeel paint
 - Presence knobs: smaller, same style, labelled "Presence Yellow" / "Presence Red"
 - Default Presence = fully CCW (matches hardware default = no treble boost)

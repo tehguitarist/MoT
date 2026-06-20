@@ -4,6 +4,8 @@ A dual-channel overdrive plugin (AU/VST3) inspired by classic boutique
 Bluesbreaker-derived pedal designs. Built with JUCE and modelled using
 Wave Digital Filters (WDF) for an analog-feeling response.
 
+![image](image.png)
+
 ## Overview
 
 Monarch of Tone emulates two independent overdrive channels running in
