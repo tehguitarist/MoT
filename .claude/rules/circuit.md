@@ -313,6 +313,40 @@ op-amp model).
 
 ## 6. Stage 1 — IC_A (Non-Inverting Amplifier)
 
+> **⚠️ MAJOR CORRECTION 2026-06-20 — Z_lower topology + DRIVE floors were WRONG (model fix
+> PENDING).** Re-traced from the **Theseus schematic** (`analysis/theseus schematic.png`) and
+> confirmed against the **Theseus kit parts list** (`analysis/theseus_kit_documentation.pdf`
+> p29). Found while A/B-ing the model against NAM captures of a real KOT: our implemented Stage-1
+> matches the matsumin trace below, but the matsumin trace's **Z_lower is a different topology
+> than the real KOT/Theseus** (the captures' pedal), which explains the residual EQ curve and the
+> low-frequency drive/THD deficit vs the captures.
+>
+> **Z_lower (NodeF → GND) — ACTUAL (Theseus), with values parts-list-confirmed:**
+> ```
+> NodeF ──┬── R4(27k) ─────────────┐
+>         └── R5(33k) ── C3(10n) ───┴── node_a ── C4(10n) ── GND
+> ```
+> i.e. `Z_lower(s) = [ R4 ∥ (R5 + 1/sC3) ] + 1/sC4` — **C4 is a SINGLE shared series cap to
+> ground**; C3 reaches ground only *through* C4. This is NOT the two-independent-branches model
+> `(R7+C5) ∥ (R8+C6)` documented below. Same component VALUES (R4=27k, R5=33k, C3=C4=10n), wholly
+> different pole/zero structure → different gain-vs-frequency (the Stage-1 voicing that feeds the
+> clipper). DC gain is still 1 (both caps block at DC).
+>
+> **DRIVE floor (Z_upper) — ACTUAL (Theseus):** the feedback floor resistor is **R2 = 100k**, with
+> **SW1B + R3(1k)** switchable in parallel (the Hi-Gain switch). Parts list confirms R2=100k,
+> R3=1k. So **stock (Yellow) floor = R2∥R3 ≈ 1k** (SW1B closed), **Hi-Gain (Red) floor = R2 = 100k**
+> (SW1B open). Our model's `R6_floor=10k` (Yellow) / `HiGain_floor=39k` (Red) are tuned guesses —
+> the real stock↔Hi-Gain spread (1k↔100k) is far wider. Also **input cap C1 = 22n** (Theseus;
+> matsumin/our C3 = 10n — negligible, both sub-audio). Tapers parts-list-confirmed: DRIVE 100kB
+> linear, TONE 25kB linear, VOL 100kA audio (so the EQ residual is NOT a taper issue). IC voltages
+> (p30): V+ 9.15 V, V− 0, bias ~4.5 V → confirms ±3.3 V rail.
+>
+> **MODEL FIX PENDING (Step 11):** rebuild Stage-1's Z_lower to the topology above, re-derive the
+> R-type scattering matrix (`tools/r_solver_sympy.py`, new netlist), set the real floors, then
+> re-validate vs the captures and **likely retire the artificial capture-match tilt shelf**
+> (PluginProcessor.h `TiltShelf`, commit 684ec5b) since it was compensating for this. Everything
+> from here to the end of §7 describes the SUPERSEDED matsumin two-branch model still in the code.
+
 > **CORRECTED 2026-06-15** — re-traced directly from `king_of_tone_schematic.png`. The
 > previous version of this section misidentified R7/R8/C4 placement and the role of the
 > DRIVE pot. Two crops confirm the corrected topology below:

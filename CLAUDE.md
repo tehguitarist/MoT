@@ -54,7 +54,10 @@ clang-format -i src/**/*.{cpp,h}
 
 ## Repository State
 
-> **CURRENT: Step 9 — UI complete (engine + full UI done & validated)**
+> **CURRENT: Step 11 — Real-pedal (NAM capture) A/B calibration in progress.** Engine + UI are
+> complete & validated; we are now matching the model to NAM captures of a real King of Tone
+> (single Yellow/stock channel) in `analysis/`. A schematic re-check (2026-06-20) found a
+> **fundamental Stage-1 Z_lower topology error** — see circuit.md §6 and Step 11 below.
 
 The full audio engine is done & validated (all stages, `MonarchChannel`, `processBlock`,
 oversampling — Step 7/8). **The UI is now complete:**
@@ -71,9 +74,21 @@ oversampling — Step 7/8). **The UI is now complete:**
   logo (no ANALOG.MAN). Verified by headless render (`UISnapshot` → /tmp/monarch_ui.png) + auval.
 
 **Remaining:** Step 10 final sweep (all controls full-range, no clicks/NaN); ADAA optional.
+**Step 11 (CURRENT): real-pedal A/B calibration** — see the Build Sequence Step 11 below.
 
-Build helpers: `Standalone` plugin format (run the UI without a DAW) and the `UISnapshot` console
-app (headless editor→PNG; no display needed — `./build/.../UISnapshot [scale]`).
+Build helpers: `Standalone` plugin format (run the UI without a DAW), the `UISnapshot` console
+app (headless editor→PNG; no display needed — `./build/.../UISnapshot [scale]`), and
+**`tools/PedalRender`** (offline WAV render through the real processor, Yellow-only; for A/B vs
+the captures — `PedalRender in.wav out.wav drive tone vol pres clip`).
+
+### Real-pedal calibration harness (`analysis/`)
+- `analysis/Pedal_export/*.wav` — NAM captures of a real KOT (single stock channel) at labelled
+  settings (e.g. "G6 T5 OD" = drive 60%, tone 50%, Overdrive). `analysis/test_signal_48k.wav` is
+  the input (segments: 1 kHz cal tone, clean & driven log sweeps, 1 kHz level steps, freq tones —
+  see `gen_test_signal.py`). `analysis/analyze.py` does the A/B (THD, H2/H3, compression, EQ).
+- `analysis/theseus schematic.png` + `theseus_kit_documentation.pdf` (parts list p29, IC voltages
+  p30) — authoritative for the real KOT topology/values. **Verified 2026-06-20:** tapers (Drive
+  100kB lin, Tone 25kB lin, Vol 100kA audio), all component values, 9.15 V supply / ~4.5 V bias.
 
 ---
 
@@ -158,6 +173,33 @@ app (headless editor→PNG; no display needed — `./build/.../UISnapshot [scale
    resizable window) and the unique purple/gold `PedalFace` (knobs, 3-way clip switches, presence
    trims, LEDs, footswitches, compass rose, logo). Yellow/Red, no Hi Gain toggle. auval PASS.
 10. **Final sweep** — all controls full range, no instability, clicks, or NaN output
+11. **Real-pedal (NAM capture) A/B calibration** ← CURRENT — match the model to NAM captures of a
+    real KOT (single Yellow/stock channel) via `tools/PedalRender` + `analysis/analyze.py`:
+    - ✅ **Signal calibration** `circuitVoltsPerFS = 0.66` (commit ba86c69) — the clean/Boost
+      rail-clip onset matched to the capture (−18 dBFS 1 kHz); OD/Dist THD then matches. We trust
+      the capture's calibration over the bench voltage measurement (revisit absolute level later).
+    - ✅ **Capture-match tilt shelf + Yellow floor → 10k** (commit 684ec5b) — a fixed first-order
+      high-shelf (−2.6 dB LF / +1.4 dB HF, pivot 1.4 kHz, unity at 1 kHz) correcting a gain-
+      INVARIANT ~1 kHz-pivot EQ tilt; `TiltShelf` in PluginProcessor.h, gated out on full bypass.
+      **ARTIFICIAL — LIKELY RETIRED by the Step-11 Stage-1 fix** (it was compensating for the wrong
+      Stage-1 voicing). `TiltShelf::kEnabled=false` A/Bs the pure model.
+    - ✅ **Even-harmonic asymmetry** (commit ffa5c64, `MonarchChannel::injectEvenHarmonic`) — the
+      KOT clips symmetrically by design (→ no even harmonics), and the topology STRUCTURALLY
+      rejects the circuit-accurate bias-shift (the feedback soft-clip and hard shunt resist an
+      internal DC offset; a diode mismatch only shifts clamp LEVELS → DC → blocked). So H2 is
+      injected EMPIRICALLY at the clip output, sourced from a bounded soft-saturation of the
+      pre-clip drive (squares up at high drive → washes out, matching the captures' non-monotonic
+      H2-vs-gain), clip-depth-gated (clean stays symmetric), DC-free via a slow running mean.
+      Matches OD/Dist H2 within ~3–4 dB across drive (G2/G6/G10) and level, 440 Hz–5 kHz. **Known
+      gaps:** Boost's true (falling) trend is settled for moderate constant warmth; **<440 Hz H2
+      is under-injected because the model under-drives low notes** (the Stage-1 deficit below).
+    - ⏳ **Stage-1 Z_lower topology fix (NEXT — circuit-accurate)** — the Theseus schematic +
+      parts list (`analysis/`) show our Stage-1 Z_lower is the WRONG topology and the DRIVE floors
+      are wrong (see circuit.md §6, 2026-06-20). Plan: rebuild Z_lower, re-derive the R-type
+      scattering matrix, set the real floors (Yellow ≈ R2∥R3 ≈ 1k, Red = R2 = 100k), re-validate
+      vs captures, and **likely retire the tilt shelf**. Expected to fix the residual EQ curve AND
+      the low-note drive/THD/H2 deficit together. De-risk by simulating the corrected full chain
+      vs the captured EQ BEFORE touching the WDF matrix.
 
 ---
 
