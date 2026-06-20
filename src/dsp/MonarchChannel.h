@@ -52,14 +52,14 @@ public:
     //   • Boost: H2 ~level-independent once the rails clip → coeff saturates (tanh of clipEnv).
     // Injected as +k·(x² − ⟨x²⟩): x² is the even (H2) part; subtracting the running mean keeps it
     // DC-free. Sign of k sets the asymmetry direction (negative = OD/Dist, positive = Boost).
-    static constexpr double asymOD = -0.38;    // OD even-harmonic mix coeff
-    static constexpr double asymDist = -0.13;  // Distortion mix coeff
+    static constexpr double asymOD = -0.43;    // OD even-harmonic mix coeff
+    static constexpr double asymDist = -0.14;  // Distortion mix coeff
     static constexpr double asymBoost = 0.35;  // Boost mix coeff (modest; Boost's true trend is the
                                                // opposite — H2 falls with level via the op-amp DC
                                                // offset — which this topology resists, so we settle
                                                // for a moderate, level-independent warmth)
-    static constexpr double asymThresh = 0.45; // clipEnv ignores drive below this (clean stays clean)
-    static constexpr double asymDriveScale = 1.20; // sets where the H2 source saturates → the drive
+    static constexpr double asymThresh = 0.37; // clipEnv ignores drive below this (clean stays clean)
+    static constexpr double asymDriveScale = 1.70; // sets where the H2 source saturates → the drive
                                                    // at which H2 peaks (it washes out above, matching
                                                    // the captures' non-monotonic H2-vs-gain: peak
                                                    // ~noon, lower at max drive)
