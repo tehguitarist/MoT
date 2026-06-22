@@ -1,5 +1,7 @@
 #include "PedalFace.h"
 
+#include "Assets.h"
+
 #include <cmath>
 
 using namespace juce;
@@ -39,12 +41,14 @@ PedalFace::PedalFace (AudioProcessorValueTreeState& apvts)
     setupKnob (driveR, driveRL, "D", "drive_red");
     setupKnob (toneR, toneRL, "Tone", "tone_red");
     setupKnob (presR, presRL, "Pres", "presence_red");
+    presY.setComponentID ("presence");
+    presR.setComponentID ("presence");
 
     clipR.setMirrored (true); // right channel: labels point inward, switch at the edge
     addAndMakeVisible (clipY);
     addAndMakeVisible (clipR);
-    ledY.setOnColour (Colour (0xFFFFC21Au)); // Yellow channel
-    ledR.setOnColour (Colour (0xFFFF3300u)); // Red channel
+    ledY.setChannel (LEDIndicator::Channel::Yellow);
+    ledR.setChannel (LEDIndicator::Channel::Red);
     addAndMakeVisible (ledY);
     addAndMakeVisible (ledR);
 
@@ -64,7 +68,7 @@ PedalFace::PedalFace (AudioProcessorValueTreeState& apvts)
 
     logoL.setText ("MONARCH OF TONE", dontSendNotification);
     logoL.setJustificationType (Justification::centred);
-    logoL.setColour (Label::textColourId, Colour (MonarchLookAndFeel::cPedalGoldBright));
+    logoL.setColour (Label::textColourId, Colour (MonarchLookAndFeel::cPedalGoldBright).withAlpha (0.8f));
     addAndMakeVisible (logoL);
 
     updateLEDs();
@@ -75,18 +79,37 @@ void PedalFace::paint (Graphics& g)
     auto b = getLocalBounds().toFloat();
     const float corner = jmin (b.getWidth(), b.getHeight()) * 0.045f;
 
-    // Royal-purple body: radial gradient, lit upper-centre → dark edges (matches the photo).
-    ColourGradient body (Colour (MonarchLookAndFeel::cPedalPurpleLit), b.getCentreX(), b.getHeight() * 0.30f,
-                         Colour (MonarchLookAndFeel::cPedalPurpleDark), b.getX(), b.getBottom(), true);
-    body.addColour (0.55, Colour (MonarchLookAndFeel::cPedalPurple));
-    g.setGradientFill (body);
-    g.fillRoundedRectangle (b, corner);
+    const Image& tex = MonarchAssets::textureGraded();
+    if (tex.isValid())
+    {
+        // Cover/crop-fill: scale to fill b without stretching, then clip to the rounded body.
+        Path body;
+        body.addRoundedRectangle (b, corner);
+        Graphics::ScopedSaveState save (g);
+        g.reduceClipRegion (body);
+
+        const float scale = jmax (b.getWidth() / (float) tex.getWidth(), b.getHeight() / (float) tex.getHeight());
+        const float drawW = (float) tex.getWidth() * scale, drawH = (float) tex.getHeight() * scale;
+        const Rectangle<float> dest (b.getCentreX() - drawW * 0.5f, b.getCentreY() - drawH * 0.5f, drawW, drawH);
+        g.drawImage (tex, dest, RectanglePlacement::centred, false);
+    }
+    else
+    {
+        // Fallback: royal-purple radial gradient, lit upper-centre → dark edges.
+        ColourGradient bodyGrad (Colour (MonarchLookAndFeel::cPedalPurpleLit), b.getCentreX(), b.getHeight() * 0.30f,
+                                 Colour (MonarchLookAndFeel::cPedalPurpleDark), b.getX(), b.getBottom(), true);
+        bodyGrad.addColour (0.55, Colour (MonarchLookAndFeel::cPedalPurple));
+        g.setGradientFill (bodyGrad);
+        g.fillRoundedRectangle (b, corner);
+    }
 
     // Enclosure edge.
     g.setColour (Colour (0xFF1C0516u));
     g.drawRoundedRectangle (b.reduced (0.6f), corner, jmax (1.2f, b.getWidth() * 0.004f));
 
+    g.beginTransparencyLayer (0.9f); // compass 10% less opaque (round 5)
     drawCompassRose (g, compassArea.toFloat());
+    g.endTransparencyLayer();
 }
 
 void PedalFace::drawCompassRose (Graphics& g, Rectangle<float> area) const
@@ -133,6 +156,7 @@ void PedalFace::resized()
     const float knobD = jmin (W * 0.16f, H * 0.20f);
     const float presD = knobD * 0.264f; // small presence trims (0.6× the previous size)
     const float labH = jmax (10.0f, H * 0.052f);
+    const float cx0 = W * 0.5f;
 
     auto place = [] (Component& c, float cx, float cy, float w, float h) {
         c.setBounds (roundToInt (cx - w * 0.5f), roundToInt (cy - h * 0.5f), roundToInt (w), roundToInt (h));
@@ -141,10 +165,16 @@ void PedalFace::resized()
         place (l, cx, cyKnob + knob * gap, knob * 1.6f, labH);
     };
 
-    // Top row: Volume / Drive per channel — SAME order on both channels (Volume left, Drive right).
+    // Top row: Volume / Drive per channel, spread wider with a bigger mutual gap (2026-06-22
+    // round 2). Tone sits below, between the clip switch's OD label and the Presence knob, and
+    // is nudged down a little from its previous spot.
     const float topY = H * 0.155f;
-    const float volYx = W * 0.135f, driveYx = W * 0.330f;
-    const float volRx = W * 0.670f, driveRx = W * 0.865f;
+    const float toneRowY = H * 0.40f;
+    const float halfGapVD = W * 0.095f; // round 5: a bit more gap between V and D
+    const float wideStep = knobD * 0.25f; // round 4: nudge the whole V/D/Tone group out again
+    const float toneYx = W * 0.26f - wideStep, toneRx = W * 0.74f + wideStep;
+    const float volYx = toneYx - halfGapVD, driveYx = toneYx + halfGapVD;
+    const float volRx = toneRx - halfGapVD, driveRx = toneRx + halfGapVD; // V then D, left-to-right (match Yellow)
     place (volY, volYx, topY, knobD, knobD);
     place (driveY, driveYx, topY, knobD, knobD);
     place (volR, volRx, topY, knobD, knobD);
@@ -154,45 +184,69 @@ void PedalFace::resized()
     placeLabel (volRL, volRx, topY, knobD);
     placeLabel (driveRL, driveRx, topY, knobD);
 
-    // Tone knob centred between Volume and Drive, pulled UP closer to that pair.
-    const float toneRowY = H * 0.37f;
-    const float toneYx = (volYx + driveYx) * 0.5f;
-    const float toneRx = (volRx + driveRx) * 0.5f;
     place (toneY, toneYx, toneRowY, knobD, knobD);
     place (toneR, toneRx, toneRowY, knobD, knobD);
     placeLabel (toneYL, toneYx, toneRowY, knobD);
     placeLabel (toneRL, toneRx, toneRowY, knobD);
 
-    // Compass centre.
-    const float compD = jmin (W * 0.215f, H * 0.30f);
+    // Compass centre — footprint used for layout anchoring (Presence position) stays at the
+    // ORIGINAL size; the DRAWN compass is 20% larger (compD) and is allowed to overlap
+    // neighbours, per the earlier tweak request — painted in PedalFace::paint(), before any
+    // child component paints, so it is already behind everything except the texture.
+    const float compDOrig = jmin (W * 0.215f, H * 0.30f);
+    const float compD = compDOrig * 1.2f * 1.1f * 0.95f * 0.93f; // round 7: another -7% drawn size
     const float compCy = H * 0.44f;
-    compassArea = Rectangle<float> (W * 0.5f - compD * 0.5f, compCy - compD * 0.5f, compD, compD).toNearestInt();
+    compassArea = Rectangle<float> (cx0 - compD * 0.5f, compCy - compD * 0.5f, compD, compD).toNearestInt();
 
-    // Small Presence trims: vertical centre = compass centre, on either side, clear of the graphic.
-    const float presX = W * 0.5f - compD * 0.5f - presD * 0.85f; // just outside the compass
+    // Presence trims: moved a little further out from the (original) compass footprint, then
+    // back in a touch (round 5).
+    const float presX = cx0 - compDOrig * 0.5f - presD * 1.1f;
     place (presY, presX, compCy, presD, presD);
     place (presR, W - presX, compCy, presD, presD);
     placeLabel (presYL, presX, compCy, presD, 0.85f);
     placeLabel (presRL, W - presX, compCy, presD, 0.85f);
 
-    // 3-way clip switches at the left/right edges (raised up more).
-    const float clipW = W * 0.12f, clipH = H * 0.20f;
-    place (clipY, W * 0.085f, H * 0.49f, clipW, clipH);
-    place (clipR, W * 0.915f, H * 0.49f, clipW, clipH);
-
-    // LEDs, then the (large) logo, then the footswitches.
-    const float ledBox = jmin (W, H) * 0.055f;
-    place (ledY, W * 0.40f, H * 0.62f, ledBox, ledBox);
-    place (ledR, W * 0.60f, H * 0.62f, ledBox, ledBox);
-
-    place (logoL, W * 0.5f, H * 0.73f, W * 0.94f, H * 0.16f);
-
-    const float fsD = jmin (W * 0.12f, H * 0.17f);
+    // Footswitches: 15% smaller, scaled about their existing centre (position unchanged).
+    const float fsD = jmin (W * 0.12f, H * 0.17f) * 0.85f;
     const float fsY = H * 0.875f;
-    place (bypassY, W * 0.27f, fsY, fsD, fsD);
-    place (bypassR, W * 0.73f, fsY, fsD, fsD);
-    place (bypassYL, W * 0.27f, fsY + fsD * 0.60f, fsD * 1.7f, labH);
-    place (bypassRL, W * 0.73f, fsY + fsD * 0.60f, fsD * 1.7f, labH);
+    const float fsYx = W * 0.27f, fsRx = W * 0.73f;
+    place (bypassY, fsYx, fsY, fsD, fsD);
+    place (bypassR, fsRx, fsY, fsD, fsD);
+    place (bypassYL, fsYx, fsY + fsD * 0.68f, fsD * 1.7f, labH); // round 5: a touch lower
+    place (bypassRL, fsRx, fsY + fsD * 0.68f, fsD * 1.7f, labH);
+
+    // 3-way clip switches: the 2.5x size (2x + round-2's 1.25x) came out far too large — scaled
+    // back down to 40% of that (round 3), which nets out to the original 1x size; then +5% (round 4).
+    // Computed before the LEDs/logo below so the logo band can clear the switch's footprint.
+    const float clipW = W * 0.12f * 2.0f * 1.25f * 0.4f * 1.05f, clipH = H * 0.20f * 2.0f * 1.25f * 0.4f * 1.05f;
+    const float clipYx = clipW * 0.5f + W * 0.032f, clipRx = W - clipYx; // round 5: a little further in
+    const float clipCy = H * 0.52f;
+    place (clipY, clipYx, clipCy, clipW, clipH);
+    place (clipR, clipRx, clipCy, clipW, clipH);
+    const float clipBottomEdge = clipCy + clipH * 0.5f;
+
+    // LEDs: vertical position unchanged; horizontal position now equidistant between the
+    // (drawn, enlarged) compass edge and the nearer edge of the respective footswitch.
+    const float ledBox = jmin (W, H) * 0.075f;
+    const float ledCy = H * 0.62f;
+    const float compLeftEdge = cx0 - compD * 0.5f, compRightEdge = cx0 + compD * 0.5f;
+    const float fsYRightEdge = fsYx + fsD * 0.5f, fsRLeftEdge = fsRx - fsD * 0.5f;
+    const float ledYx = (compLeftEdge + fsYRightEdge) * 0.5f;
+    const float ledRx = (compRightEdge + fsRLeftEdge) * 0.5f;
+    place (ledY, ledYx, ledCy, ledBox, ledBox);
+    place (ledR, ledRx, ledCy, ledBox, ledBox);
+
+    // Logo: 90% opacity is set once in the constructor. Band starts below whichever is lower —
+    // the LED row or the (now much taller) clip switches' DIST labels — so the enlarged switches
+    // never collide with the logo text; the label itself is 10% smaller (font size in refresh()).
+    const float fsTopEdge = fsY - fsD * 0.5f;
+    const float ledBottomEdge = ledCy + ledBox * 0.5f;
+    const float bandTop = jmax (ledBottomEdge, clipBottomEdge);
+    // Centred at the midpoint of (bandTop, fsTopEdge) so the gap above the letters equals the gap
+    // below them; nudged down a touch further (round 5) per visual check.
+    const float logoCy = bandTop + (fsTopEdge - bandTop) * 0.5f + (fsTopEdge - bandTop) * 0.08f;
+    const float logoH = jmin (H * 0.12f, (fsTopEdge - bandTop) * 0.85f);
+    place (logoL, cx0, logoCy, W * 0.94f, logoH);
 }
 
 void PedalFace::refresh (float sc)
@@ -209,7 +263,7 @@ void PedalFace::refresh (float sc)
     bypassYL.setFont (bypassFont);
     bypassRL.setFont (bypassFont);
 
-    logoL.setFont (papyrus (jmax (30.0f, 55.0f * sc))); // 2.5× larger
+    logoL.setFont (papyrus (jmax (27.0f, 49.5f * sc))); // 2.5× larger, then 10% smaller (round 2)
 
     clipY.setLabelScale (sc);
     clipR.setLabelScale (sc);

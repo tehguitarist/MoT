@@ -2,15 +2,24 @@
 
 #include <juce_gui_basics/juce_gui_basics.h>
 
+#include "Assets.h"
+
 /**
- * Small status LED with a soft radial glow when on. Active = green (0xFF00DD55) with glow;
- * inactive = dim (0xFF091A09). Driven from the editor timer by reading the bypass parameter
- * (LED on = channel active). The component should be sized a little larger than the lit core
- * so the glow has room to fall off.
+ * Small status LED rendered from the bezel art (glow baked into the image). Active = the
+ * channel's coloured bezel (yellow or red); inactive = the dim/off bezel. Driven from the
+ * editor timer by reading the bypass parameter (LED on = channel active). The images are
+ * slightly larger than the original vector part since their glow is baked in — the component
+ * is sized accordingly in PedalFace::resized().
  */
 class LEDIndicator : public juce::Component
 {
 public:
+    enum class Channel
+    {
+        Yellow,
+        Red
+    };
+
     LEDIndicator() = default;
 
     void setOn (bool shouldBeOn)
@@ -22,43 +31,30 @@ public:
         }
     }
 
-    /** Lit colour for this LED (e.g. yellow for the Yellow channel, red for Red). */
-    void setOnColour (juce::Colour c)
+    /** Which channel this LED belongs to (selects the yellow/red lit bezel art). */
+    void setChannel (Channel c)
     {
-        onColour = c;
+        channel = c;
         repaint();
     }
 
     void paint (juce::Graphics& g) override
     {
+        const juce::Image img = on
+            ? (channel == Channel::Yellow ? MonarchAssets::ledYellow() : MonarchAssets::ledRed())
+            : MonarchAssets::ledOff();
+        if (! img.isValid())
+            return;
+
         const auto b = getLocalBounds().toFloat();
-        const float cx = b.getCentreX(), cy = b.getCentreY();
-        const float coreR = juce::jmin (b.getWidth(), b.getHeight()) * 0.32f;
-        const juce::Colour core = on ? onColour : onColour.withMultipliedSaturation (0.7f).withBrightness (0.10f);
-
-        // Soft radial glow (only when lit).
-        if (on)
-        {
-            const float glowR = juce::jmin (b.getWidth(), b.getHeight()) * 0.5f;
-            juce::ColourGradient glow (core.withAlpha (0.55f), cx, cy,
-                                       core.withAlpha (0.0f), cx + glowR, cy, true);
-            g.setGradientFill (glow);
-            g.fillEllipse (cx - glowR, cy - glowR, glowR * 2.0f, glowR * 2.0f);
-        }
-
-        // Lit core, slightly domed.
-        juce::ColourGradient body (core.brighter (0.35f), cx - coreR * 0.3f, cy - coreR * 0.3f,
-                                   core.darker (0.45f), cx + coreR * 0.35f, cy + coreR * 0.35f, true);
-        g.setGradientFill (body);
-        g.fillEllipse (cx - coreR, cy - coreR, coreR * 2.0f, coreR * 2.0f);
-
-        g.setColour (juce::Colours::black.withAlpha (0.4f));
-        g.drawEllipse (cx - coreR, cy - coreR, coreR * 2.0f, coreR * 2.0f, 1.0f);
+        const float d = juce::jmin (b.getWidth(), b.getHeight());
+        const juce::Rectangle<float> dest (b.getCentreX() - d * 0.5f, b.getCentreY() - d * 0.5f, d, d);
+        g.drawImage (img, dest, juce::RectanglePlacement::centred, false);
     }
 
 private:
     bool on { true };
-    juce::Colour onColour { 0xFF00DD55u };
+    Channel channel { Channel::Yellow };
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (LEDIndicator)
 };

@@ -22,6 +22,22 @@ foreach(dep chowdsp_wdf xsimd)
     endif()
 endforeach()
 
+juce_add_binary_data(MonarchAssets
+    SOURCES
+        assets/ui/bakelite_knob.png
+        assets/ui/trim_knob.png
+        assets/ui/vol_trim.png
+        assets/ui/bezel_led_off.png
+        assets/ui/bezel_led_yellow.png
+        assets/ui/bezel_led_red.png
+        assets/ui/footswitch_up.png
+        assets/ui/footswitch_down.png
+        assets/ui/switch_up.png
+        assets/ui/switch_mid.png
+        assets/ui/switch_down.png
+        assets/ui/mot_texture.jpg
+)
+
 juce_add_plugin(Monarch
     COMPANY_NAME "Leigh Pierce"
     BUNDLE_ID "com.leighpierce.monarchoftone"
@@ -62,6 +78,7 @@ target_link_libraries(Monarch
     PRIVATE
         xsimd::xsimd
         chowdsp::chowdsp_wdf
+        MonarchAssets
     PUBLIC
         juce::juce_audio_utils
         juce::juce_dsp
@@ -212,6 +229,7 @@ target_link_libraries(UISnapshot
     PRIVATE
         xsimd::xsimd
         chowdsp::chowdsp_wdf
+        MonarchAssets
         juce::juce_audio_utils
         juce::juce_dsp
         juce::juce_recommended_config_flags
@@ -242,6 +260,7 @@ target_link_libraries(PedalRender
     PRIVATE
         xsimd::xsimd
         chowdsp::chowdsp_wdf
+        MonarchAssets
         juce::juce_audio_utils
         juce::juce_dsp
         juce::juce_recommended_config_flags
@@ -272,6 +291,7 @@ target_link_libraries(ControlSweep
     PRIVATE
         xsimd::xsimd
         chowdsp::chowdsp_wdf
+        MonarchAssets
         juce::juce_audio_utils
         juce::juce_dsp
         juce::juce_recommended_config_flags

@@ -60,8 +60,8 @@ public:
 private:
     void drawTrimHalo (juce::Graphics&, juce::Rectangle<float> bounds, float sliderPos,
                        float startAngle, float endAngle);
-    void drawMainKnob (juce::Graphics&, juce::Rectangle<float> bounds, float sliderPos,
-                       float startAngle, float endAngle);
+    void drawKnobImage (juce::Graphics&, const juce::Image&, juce::Rectangle<float> bounds,
+                       float sliderPos, float startAngle, float endAngle);
     void drawBypassFootswitch (juce::Graphics&, juce::Rectangle<float> bounds, bool isDown);
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (MonarchLookAndFeel)

@@ -1,5 +1,7 @@
 #include "MonarchLookAndFeel.h"
 
+#include "Assets.h"
+
 #include <cmath>
 
 using namespace juce;
@@ -19,43 +21,30 @@ void MonarchLookAndFeel::drawRotarySlider (Graphics& g, int x, int y, int width,
                                            float rotaryEndAngle, Slider& s)
 {
     const auto bounds = Rectangle<int> (x, y, width, height).toFloat();
-    if (s.getComponentID() == "trim")
+    const auto id = s.getComponentID();
+    if (id == "trim")
         drawTrimHalo (g, bounds, sliderPos, rotaryStartAngle, rotaryEndAngle);
+    else if (id == "presence")
+        drawKnobImage (g, MonarchAssets::presenceKnobGraded(), bounds, sliderPos, rotaryStartAngle, rotaryEndAngle);
     else
-        drawMainKnob (g, bounds, sliderPos, rotaryStartAngle, rotaryEndAngle); // black knurled (pedal face)
+        drawKnobImage (g, MonarchAssets::bakeliteKnobGraded(), bounds, sliderPos, rotaryStartAngle, rotaryEndAngle);
 }
 
-void MonarchLookAndFeel::drawMainKnob (Graphics& g, Rectangle<float> bounds, float sliderPos,
-                                       float startAngle, float endAngle)
+void MonarchLookAndFeel::drawKnobImage (Graphics& g, const Image& img, Rectangle<float> bounds,
+                                        float sliderPos, float startAngle, float endAngle)
 {
+    if (! img.isValid())
+        return;
+
     const float d = jmin (bounds.getWidth(), bounds.getHeight());
-    const float cx = bounds.getCentreX(), cy = bounds.getCentreY();
-    const float r = d * 0.5f * 0.94f; // plain black cap, no skirt (ref: pedal photo)
     const float toAngle = startAngle + sliderPos * (endAngle - startAngle);
+    const float noonAngle = 0.5f * (startAngle + endAngle); // image art is drawn at "noon"
 
-    // Drop shadow.
-    g.setColour (Colours::black.withAlpha (0.45f));
-    g.fillEllipse (cx - r + 1.0f, cy - r + 2.0f, r * 2.0f, r * 2.0f);
+    const Rectangle<float> dest (bounds.getCentreX() - d * 0.5f, bounds.getCentreY() - d * 0.5f, d, d);
 
-    // Cap body — black radial gradient, lit upper-left.
-    ColourGradient body (Colour (0xFF3C3C42u), cx - r * 0.4f, cy - r * 0.5f,
-                         Colour (0xFF09090Bu), cx + r * 0.45f, cy + r * 0.6f, true);
-    body.addColour (0.6, Colour (cKnobBlack));
-    g.setGradientFill (body);
-    g.fillEllipse (cx - r, cy - r, r * 2.0f, r * 2.0f);
-
-    // Rim ring + a soft top sheen.
-    g.setColour (Colours::black);
-    g.drawEllipse (cx - r, cy - r, r * 2.0f, r * 2.0f, jmax (1.0f, d * 0.02f));
-    g.setColour (Colours::white.withAlpha (0.10f));
-    g.drawEllipse (cx - r * 0.82f, cy - r * 0.9f, r * 1.64f, r * 1.16f, jmax (1.0f, d * 0.012f));
-
-    // White indicator line.
-    const float sinA = std::sin (toAngle), cosA = std::cos (toAngle);
-    const Point<float> p1 (cx + 0.12f * r * sinA, cy - 0.12f * r * cosA);
-    const Point<float> p2 (cx + 0.82f * r * sinA, cy - 0.82f * r * cosA);
-    g.setColour (Colour (0xFFF2F2F2u));
-    g.drawLine (Line<float> (p1, p2), jmax (1.5f, d * 0.05f));
+    Graphics::ScopedSaveState save (g);
+    g.addTransform (AffineTransform::rotation (toAngle - noonAngle, bounds.getCentreX(), bounds.getCentreY()));
+    g.drawImage (img, dest, RectanglePlacement::centred, false);
 }
 
 void MonarchLookAndFeel::drawTrimHalo (Graphics& g, Rectangle<float> bounds, float sliderPos,
@@ -69,7 +58,6 @@ void MonarchLookAndFeel::drawTrimHalo (Graphics& g, Rectangle<float> bounds, flo
     const float arcW = diameter * (5.0f / 70.0f);
     const float arcR = diameter * 0.5f - arcW * 0.5f - 1.0f;
     const float capR = diameter * (18.0f / 70.0f);
-    const float indW = jmax (1.0f, diameter * (2.5f / 70.0f));
     const float toAngle = startAngle + sliderPos * (endAngle - startAngle);
 
     // Outer arc track (full 270° sweep) then the value arc on top.
@@ -83,19 +71,16 @@ void MonarchLookAndFeel::drawTrimHalo (Graphics& g, Rectangle<float> bounds, flo
     g.setColour (Colour (cTrimArc));
     g.strokePath (value, PathStrokeType (arcW, PathStrokeType::curved, PathStrokeType::rounded));
 
-    // Cap — radial gradient highlight → mid → shadow, lit from upper-left.
-    ColourGradient cap (Colour (cKnobHighlight), cx - capR * 0.4f, cy - capR * 0.45f,
-                        Colour (cKnobShadow), cx + capR * 0.5f, cy + capR * 0.55f, true);
-    cap.addColour (0.55, Colour (cKnobMid));
-    g.setGradientFill (cap);
-    g.fillEllipse (cx - capR, cy - capR, capR * 2.0f, capR * 2.0f);
-
-    // Indicator line (angle measured clockwise from 12 o'clock).
-    const float sinA = std::sin (toAngle), cosA = std::cos (toAngle);
-    const Point<float> p1 (cx + 0.30f * capR * sinA, cy - 0.30f * capR * cosA);
-    const Point<float> p2 (cx + 0.92f * capR * sinA, cy - 0.92f * capR * cosA);
-    g.setColour (Colour (cKnobIndicator));
-    g.drawLine (Line<float> (p1, p2), indW);
+    // Cap — image art (rotated to sliderPos), sized to the same footprint as the old vector cap.
+    const Image& img = MonarchAssets::trimKnob();
+    if (img.isValid())
+    {
+        const float noonAngle = 0.5f * (startAngle + endAngle);
+        const Rectangle<float> dest (cx - capR, cy - capR, capR * 2.0f, capR * 2.0f);
+        Graphics::ScopedSaveState save (g);
+        g.addTransform (AffineTransform::rotation (toAngle - noonAngle, cx, cy));
+        g.drawImage (img, dest, RectanglePlacement::centred, false);
+    }
 }
 
 // ============================ Oversampling combo box ============================
@@ -151,75 +136,13 @@ Font MonarchLookAndFeel::getTextButtonFont (TextButton&, int buttonHeight)
 
 void MonarchLookAndFeel::drawBypassFootswitch (Graphics& g, Rectangle<float> b, bool isButtonDown)
 {
-    const float cx = b.getCentreX(), cy = b.getCentreY();
-    const float nutR = jmin (b.getWidth(), b.getHeight()) * 0.5f - 1.0f;
-    const float domeR = nutR * 0.60f;
+    // isButtonDown is the momentary mouse-down state (not the bypass toggle state) — the
+    // down-image is a press animation only, per ui/ui-replacements.md.
+    const Image img = isButtonDown ? MonarchAssets::footswitchDownGraded() : MonarchAssets::footswitchUpGraded();
+    if (! img.isValid())
+        return;
 
-    auto makeOctagon = [&] (float radius) -> Path {
-        Path p;
-        for (int i = 0; i < 8; ++i)
-        {
-            const float a = (float) i / 8.0f * MathConstants<float>::twoPi + MathConstants<float>::pi / 8.0f;
-            const float px = cx + radius * std::cos (a);
-            const float py = cy + radius * std::sin (a);
-            if (i == 0)
-                p.startNewSubPath (px, py);
-            else
-                p.lineTo (px, py);
-        }
-        p.closeSubPath();
-        return p;
-    };
-
-    // ---- Layer 1: octagonal nut ----
-    auto shadow = makeOctagon (nutR);
-    shadow.applyTransform (AffineTransform::translation (1.5f, 3.0f));
-    g.setColour (Colours::black.withAlpha (0.45f));
-    g.fillPath (shadow);
-
-    ColourGradient nutGrad (Colour (0xFF8A8E94u), cx - nutR * 0.4f, cy - nutR * 0.5f,
-                            Colour (0xFF2E3238u), cx + nutR * 0.4f, cy + nutR * 0.5f, false);
-    nutGrad.addColour (0.30, Colour (0xFF606468u));
-    nutGrad.addColour (0.65, Colour (0xFF404448u));
-    g.setGradientFill (nutGrad);
-    g.fillPath (makeOctagon (nutR));
-
-    g.setColour (Colour (0xFF1A1C1Eu));
-    g.strokePath (makeOctagon (nutR), PathStrokeType (1.0f));
-
-    {
-        auto facet = makeOctagon (nutR);
-        g.saveState();
-        g.reduceClipRegion (facet);
-        ColourGradient sheen (Colour (0x30FFFFFFu), cx - nutR * 0.3f, cy - nutR * 0.55f,
-                              Colours::transparentWhite, cx, cy - nutR * 0.1f, false);
-        g.setGradientFill (sheen);
-        g.fillPath (facet);
-        g.restoreState();
-    }
-
-    // ---- Layer 2: recessed socket ring ----
-    g.setColour (Colour (0xFF101214u));
-    g.fillEllipse (cx - domeR - 4.0f, cy - domeR - 4.0f, (domeR + 4.0f) * 2.0f, (domeR + 4.0f) * 2.0f);
-
-    // ---- Layer 3: circular rubber dome (the switch) ----
-    const float pressOff = isButtonDown ? 1.5f : 0.0f;
-
-    g.setColour (Colours::black.withAlpha (0.50f));
-    g.fillEllipse (cx - domeR + 1.0f, cy - domeR + 2.5f + pressOff, domeR * 2.0f, domeR * 2.0f);
-
-    ColourGradient domeGrad (Colour (0xFFDCE0E4u), cx - domeR * 0.28f, cy - domeR * 0.35f - pressOff,
-                             Colour (0xFF7A8490u), cx + domeR * 0.25f, cy + domeR * 0.35f + pressOff, true);
-    domeGrad.addColour (0.45, Colour (0xFFAEB8C0u));
-    g.setGradientFill (domeGrad);
-    g.fillEllipse (cx - domeR, cy - domeR + pressOff, domeR * 2.0f, domeR * 2.0f);
-
-    g.setColour (Colour (0xFF303438u));
-    g.drawEllipse (cx - domeR + 0.5f, cy - domeR + pressOff + 0.5f, domeR * 2.0f - 1.0f, domeR * 2.0f - 1.0f, 1.0f);
-
-    if (! isButtonDown)
-    {
-        g.setColour (Colours::white.withAlpha (0.55f));
-        g.fillEllipse (cx - domeR * 0.50f, cy - domeR * 0.52f, domeR * 0.52f, domeR * 0.28f);
-    }
+    const float d = jmin (b.getWidth(), b.getHeight());
+    const Rectangle<float> dest (b.getCentreX() - d * 0.5f, b.getCentreY() - d * 0.5f, d, d);
+    g.drawImage (img, dest, RectanglePlacement::centred, false);
 }

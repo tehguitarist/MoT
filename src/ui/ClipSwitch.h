@@ -4,6 +4,7 @@
 
 #include <juce_audio_processors/juce_audio_processors.h>
 
+#include "Assets.h"
 #include "MonarchLookAndFeel.h"
 
 /**
@@ -39,53 +40,44 @@ public:
     void paint (juce::Graphics& g) override
     {
         auto b = getLocalBounds().toFloat();
-        // Switch body is ~42% of the width; the rest holds the three stacked mode labels.
-        const float fullW = b.getWidth();
-        auto sw = (mirrored ? b.removeFromRight (fullW * 0.42f) : b.removeFromLeft (fullW * 0.42f))
-                      .reduced (fullW * 0.04f, 0.0f);
-        auto labels = b;
-        const auto labelJustify = mirrored ? juce::Justification::centredRight : juce::Justification::centredLeft;
+        const float W = b.getWidth(), H = b.getHeight();
 
-        // Switch housing (dark rounded pill).
-        const float corner = sw.getWidth() * 0.5f;
-        g.setColour (juce::Colour (0xFF0A0A0Cu));
-        g.fillRoundedRectangle (sw, corner);
-        g.setColour (juce::Colour (0xFF000000u));
-        g.drawRoundedRectangle (sw.reduced (0.5f), corner, 1.0f);
+        // BOOST sits above the switch, DIST below, OD beside it (same side as before — nearest
+        // the switch). `gap` is shared between the BOOST/DIST vertical offset and the OD
+        // horizontal offset, so all three labels sit the same distance from the switch body.
+        const float labelH = juce::jmax (8.0f, labelFontPx * 1.3f);
+        const float gap = juce::jmin (W, H) * 0.08f;
+        const float switchD = juce::jmax (10.0f, H - 2.0f * (labelH + gap));
+        const float switchX = mirrored ? (W - switchD) : 0.0f;
+        const float switchY = labelH + gap;
+        const auto sw = juce::Rectangle<float> (switchX, switchY, switchD, switchD);
 
-        // Three detent centres (top→bottom = 0,1,2) and the metallic thumb at the active one.
-        const float thumbR = sw.getWidth() * 0.40f;
-        for (int i = 0; i < 3; ++i)
-        {
-            const float cy = sw.getY() + sw.getHeight() * (0.18f + 0.32f * (float) i);
-            const float cx = sw.getCentreX();
-            if (i == index)
-            {
-                juce::ColourGradient grad (juce::Colour (0xFFE6E6EAu), cx - thumbR * 0.3f, cy - thumbR * 0.4f,
-                                           juce::Colour (0xFF6E7078u), cx + thumbR * 0.3f, cy + thumbR * 0.4f, true);
-                g.setGradientFill (grad);
-                g.fillEllipse (cx - thumbR, cy - thumbR, thumbR * 2.0f, thumbR * 2.0f);
-                g.setColour (juce::Colour (MonarchLookAndFeel::cPedalGold));
-                g.drawEllipse (cx - thumbR, cy - thumbR, thumbR * 2.0f, thumbR * 2.0f, juce::jmax (1.0f, thumbR * 0.22f));
-            }
-            else
-            {
-                g.setColour (juce::Colour (0xFF1C1C20u));
-                g.fillEllipse (cx - thumbR * 0.45f, cy - thumbR * 0.45f, thumbR * 0.9f, thumbR * 0.9f);
-            }
-        }
+        // Switch art — one image per position (index 0=Boost/up, 1=OD/mid, 2=Dist/down).
+        const juce::Image img = index == 0 ? MonarchAssets::switchUpGraded()
+                               : index == 1 ? MonarchAssets::switchMid()
+                                            : MonarchAssets::switchDown();
+        if (img.isValid())
+            g.drawImage (img, sw, juce::RectanglePlacement::centred, false);
 
-        // Mode labels (active = bright gold, others dimmed).
-        static const char* names[] = { "BOOST", "OD", "DIST" };
         g.setFont (juce::Font (juce::FontOptions (labelFontPx, juce::Font::bold)));
-        for (int i = 0; i < 3; ++i)
-        {
-            const float rowY = labels.getY() + labels.getHeight() * (0.18f + 0.32f * (float) i) - labelFontPx;
-            const auto row = juce::Rectangle<float> (labels.getX(), rowY, labels.getWidth(), labelFontPx * 2.0f);
-            g.setColour (i == index ? juce::Colour (MonarchLookAndFeel::cPedalGoldBright)
-                                    : juce::Colour (MonarchLookAndFeel::cPedalGold).withAlpha (0.4f));
-            g.drawText (names[i], row, labelJustify);
-        }
+        auto colourFor = [this] (int i) {
+            return i == index ? juce::Colour (MonarchLookAndFeel::cPedalGoldBright)
+                               : juce::Colour (MonarchLookAndFeel::cPedalGold).withAlpha (0.4f);
+        };
+
+        g.setColour (colourFor (0));
+        g.drawText ("BOOST", juce::Rectangle<float> (switchX, 0.0f, switchD, labelH), juce::Justification::centred);
+
+        g.setColour (colourFor (2));
+        g.drawText ("DIST", juce::Rectangle<float> (switchX, switchY + switchD + gap, switchD, labelH),
+                    juce::Justification::centred);
+
+        g.setColour (colourFor (1));
+        const float odX = mirrored ? 0.0f : (switchD + gap);
+        const float odW = mirrored ? (switchX - gap) : (W - switchD - gap);
+        const auto odJustify = mirrored ? juce::Justification::centredRight : juce::Justification::centredLeft;
+        g.drawText ("OD", juce::Rectangle<float> (odX, switchY + switchD * 0.5f - labelH * 0.5f, odW, labelH),
+                    odJustify);
     }
 
     // Click to select a position, or drag the thumb between positions.
