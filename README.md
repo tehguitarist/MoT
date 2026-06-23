@@ -20,7 +20,7 @@ design is prized.
 
 - **Dual channels in series** (Yellow → Red), each independently bypassable
 - **3 clipping modes per channel** — Boost (clean, op-amp-rail limited), Overdrive (soft
-  feedback clipping), Distortion (hard shunt clipping) — matching the real 3-position toggle
+  feedback clipping), Distortion (hard shunt clipping) — matching the real 3-position toggle mod available for the pedal.
 - **Red channel Hi-Gain mod** baked in as a fixed, non-toggleable voicing, just like the
   hardware mod it's based on
 - **Supply-voltage mod (9V / 12V / 18V)** — simulates running the pedal on a hotter supply:
