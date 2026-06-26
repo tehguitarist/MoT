@@ -34,7 +34,7 @@ jobs:
       - name: Configure
         run: cmake -B build -DCMAKE_BUILD_TYPE=Release
 
-      - name: Build plugin (macOS: AU + VST3)
+      - name: "Build plugin (macOS: AU + VST3)"
         if: runner.os == 'macOS'
         run: cmake --build build --config Release --target Monarch_AU --target Monarch_VST3 --parallel
 
