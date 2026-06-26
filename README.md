@@ -163,9 +163,11 @@ the workflow logs a warning instead of failing:
   through 16 kHz, and null tests pushed as far as they'll go, with the achieved null depth
   reported here. Also: finish Apple signing/notarization if not already turned on by then.
 - **0.9 (TODO)** — Factory presets.
-- **1.0 (TODO)** — Simple installers per platform, if JUCE/platform tooling supports it
-  cleanly (e.g. `pkgbuild`/`productbuild` on macOS, Inno Setup or WiX on Windows, an AppImage
-  or `.deb` on Linux) — otherwise the per-platform zips remain the distribution method.
+- **1.0 (TODO)** — Simple installers per platform. JUCE itself only builds the plugin/app
+  binaries, not installers — but since the project already builds with CMake, the plan is to
+  add a `CPack` config to `CMakeLists.txt` and let its built-in generators wrap the native
+  tooling: `productbuild`/`pkgbuild` on macOS, WiX or NSIS on Windows, DEB on Linux. Last item
+  on the roadmap; the per-platform zips remain the distribution method until this lands.
 
 ## Thanks
 
