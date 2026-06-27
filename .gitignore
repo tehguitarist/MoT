@@ -13,3 +13,9 @@ tools/__pycache__/
 
 # Analysis Python venv (numpy/scipy) — do not commit
 analysis/venv/
+
+# Real-pedal NAM captures — large (100s of MB), kept local-only to avoid repo bloat.
+# Regenerate the test signal with gen_test_signal.py; re-capture the pedal to reproduce.
+analysis/pedal_export2/
+analysis/Pedal_export/
+analysis/__pycache__/
