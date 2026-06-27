@@ -53,11 +53,23 @@ All of this was checked, not assumed: every component value was cross-referenced
 independent schematic sources, every discrepancy is logged with its resolution, and the
 **stock circuit was directly A/B'd against NAM captures of a real King of Tone**. After
 sub-sample time alignment and per-mode level matching, the plugin **nulls against the real
-pedal by −8.5 to −18.8 dB** across a 25-capture sweep spanning all three clipping modes, the
-full drive range, and tone settings — with the tone control's behavior under drive matching
-flat across the entire sweep. The remaining residual is concentrated at the captures' own
-aliasing/noise floor at extreme drive, not in the model. See `analysis/` for the harness and
-`CLAUDE.md` Step 11 for the full validation log.
+pedal by −7.6 to −21.7 dB (median −14.7 dB)** across a 44-capture sweep spanning all three
+clipping modes, the full drive range, and tone settings. The match is deepest through the
+most-used low/mid-gain range and shallower only at extreme drive. At a representative mid-gain
+setting (drive 5), the deepest achievable null per mode is:
+
+| Mode | Best null vs. the real pedal (drive 5) |
+|------|----------------------------------------|
+| Clean / Boost | **−20.7 dB** |
+| Overdrive | **−18.5 dB** |
+| Distortion | **−17.6 dB** |
+
+These are at the labelled knob settings — an active drive/tone/level search confirmed the
+nominal calibration is already optimal (tuning one part of the signal deeper only trades it
+against another). The remaining high-drive residual was traced circuit-accurately and is
+accepted device-physics / capture-aliasing, not a model error. See `analysis/` for the harness
+(and `analysis/VALIDATION_REPORT.md` for the full per-capture breakdown), and `CLAUDE.md` for
+the validation log.
 
 ## Building
 
