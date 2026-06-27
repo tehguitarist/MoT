@@ -112,6 +112,12 @@ clang-format -i src/**/*.{cpp,h}
 > transition. So knee sharpness is NOT a lever for the bass bloom — that needs more *gain into the
 > rails* at high drive, which can't be added circuit-accurately (Stage-1 values are schematic-verified).
 > The env hook was reverted; the bloom stays an accepted device-physics/capture limit. Don't re-try this.
+>
+> **Active null optimization at G5 — nominal is optimal (2026-06-27).** Full drive×tone×input-level
+> search per mode (`analysis/null_optimize.py` + a throwaway grid). Deepest best-segment null is at
+> the LABELLED settings: **Clean −20.7, OD −18.5, Dist −17.6 dB.** Tuning the heavily-driven segment
+> deeper (~+2 dB on sweep_drv_-12) only trades it against the lighter segments (best-across-segments
+> gets slightly worse), so nominal is the best overall match — the knob calibration is confirmed correct.
 
 The full audio engine is done & validated (all stages, `MonarchChannel`, `processBlock`,
 oversampling — Step 7/8). **The UI is now complete:**
