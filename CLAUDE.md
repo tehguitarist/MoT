@@ -83,6 +83,25 @@ clang-format -i src/**/*.{cpp,h}
 > null numbers (and the README figures) land after recapture. All internal_checks pass 5/5; the
 > taper is exact to ~1e-6 dB and volume is perfectly tone-neutral. Still Step-11-era engine; this
 > is validation tooling, not a DSP change.
+>
+> **v0.8 validation RESULT (2026-06-27, 44 recaptures):** ran the suite against 44 NAM captures
+> (drive G2–G10, tone T2–T8, Clean/OD/Dist) in `analysis/pedal_export2/`. **Null −7.6 to −21.7 dB,
+> median −14.7; down to ~−22 dB through mid gain (G4–G6).** Excellent to mid gain; degrades only at
+> very high drive (G8–G10): the real pedal's gain rises ~2–3 dB more than the model, which also
+> manifests as a bass-bloom-under-drive (real 100 Hz rel 1 kHz: −6 dB @ G2 → +2 dB @ G10; plugin
+> flat ~−5 dB) — a clipping-differential-compression effect the model has but under-drives (boosting
+> the plugin input reproduces the bloom exactly). **Verified circuit-accurately against the re-provided
+> Theseus schematic (`analysis/KoT_schematic_Theseus.png`): every Stage-1 value + topology match the
+> hardware EXACTLY** (Z_lower = C4·[R4∥(R5+C3)], floor = R2∥R3, DRIVE 100kB, C2 100pF, C1 22n). The
+> one model simplification — DRIVE is a 3-terminal pot (wiper=output, pin3→R6→Stage2) modeled as a
+> 2-terminal rheostat — was evaluated and REJECTED as a fix: modeling it literally swings Stage-2 gain
+> −22→−2.4 (a 28 dB total swing) vs the measured ~10.6 dB, i.e. the 2-terminal approximation matches the
+> data BETTER. So the high-drive residual is accepted device-physics/capture variance, NOT a value/topology
+> bug (consistent with the Step-11 "OD compresses lighter at hot input" accepted residual). Calibration
+> confirmed good: Clean/Boost 1 kHz gain matches the captures (Δ ≤ 1 dB); OD/Dist captures are level-
+> normalized per mode (the plugin's Clean>OD>Dist hierarchy is physically correct). **NOTE:** the 44
+> captures (`analysis/pedal_export2/`, 842 MB) are NOT committed (repo-bloat); the old `Pedal_export`
+> (stale, v1 signal) was deleted locally. `KoT_schematic_{Theseus.png,matsumin}` re-added to `analysis/`.
 
 The full audio engine is done & validated (all stages, `MonarchChannel`, `processBlock`,
 oversampling — Step 7/8). **The UI is now complete:**

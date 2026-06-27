@@ -162,18 +162,24 @@ the workflow logs a warning instead of failing:
 - **0.7 (current)** — VST3 wired up cross-platform (macOS/Windows/Linux), CI build+test on
   every push, and a tagged-release pipeline producing a signed/notarized macOS zip plus
   Windows and Linux VST3 zips.
-- **0.8 (in progress)** — A full reference-validation pass against real-pedal captures. The
-  Python suite is built (`analysis/`): a v2 test signal (cal tone, clean + 3-level driven
-  log-sweeps, dense tones through 1–8 kHz, twin-tone IMD, decaying notes), Farina-ESS
-  deconvolution for continuous 20 Hz–20 kHz frequency response and THD-by-band, harmonic
-  profile / odd-even split, IMD, dynamic (touch-sensitivity) response, and a null-depth
-  orchestrator across all captures that writes `analysis/VALIDATION_REPORT.md`. **Pending:** the
-  user re-captures the real pedal with the v2 signal, after which the report's achieved
-  null-depth figures land here. Internal checks (volume taper/tone-invariance, knob
-  monotonicity, sample-rate consistency, aliasing) already pass — note that volume, presence,
-  and the Red channel have **no varied-setting hardware reference** (the captures are all at
-  fixed volume=noon, presence=min, Yellow only), so those are validated for correct behaviour
-  rather than bit-matched to hardware. Also: finish Apple signing/notarization if not already on.
+- **0.8 (largely done)** — A full reference-validation pass against real-pedal captures,
+  validated against **44 NAM captures** (drive G2–G10, tone T2–T8, Clean/OD/Dist). The Python
+  suite (`analysis/`) uses a v2 test signal (cal tone, clean + 3-level driven log-sweeps, dense
+  tones through 1–8 kHz, twin-tone IMD, decaying notes), Farina-ESS deconvolution for continuous
+  20 Hz–20 kHz frequency response and THD-by-band, harmonic profile / odd-even split, IMD,
+  dynamic (touch-sensitivity) response, and a null-depth orchestrator that writes
+  `analysis/VALIDATION_REPORT.md`. **Result: the plugin nulls against the real pedal at −7.6 to
+  −21.7 dB (median −14.7 dB), down to ~−22 dB through the most-used mid-gain range (G4–G6).**
+  The match is excellent up to mid gain and degrades only at very high drive (G8–G10), where the
+  real pedal's gain rises ~2–3 dB more than the model. This residual was traced **circuit-
+  accurately against the Theseus schematic**: every Stage-1 value and the topology match the
+  hardware exactly, and modeling the DRIVE pot's literal 3-terminal wiring would *over*-swing the
+  gain vs. the measured data — so the remainder is accepted as device-physics / capture variance,
+  not a model error. Internal checks (volume taper/tone-invariance, knob monotonicity,
+  sample-rate consistency, aliasing) all pass; volume, presence, and the Red channel have **no
+  varied-setting hardware reference** (captures are fixed volume=noon, presence=min, Yellow only),
+  so those are validated for correct behaviour rather than bit-matched. Remaining: finish Apple
+  signing/notarization.
 - **0.9 (TODO)** — Factory presets.
 - **1.0 (TODO)** — Simple installers per platform. JUCE itself only builds the plugin/app
   binaries, not installers — but since the project already builds with CMake, the plan is to
