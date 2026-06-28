@@ -170,6 +170,7 @@ private:
     int activeLog2 { -1 };          // current OS exponent: 0 = 1x, 1 = 2x, 2 = 4x, 3 = 8x
     bool activeIsRender { false };
     int activeNumChannels { 0 };
+    int currentProgramIndex { 0 }; // index into monarch::getFactoryPresets(); host preset browser
 
     void cacheParamPointers();
     void pushParams();                               // APVTS → per-block knob values on both strips

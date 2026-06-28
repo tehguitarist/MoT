@@ -139,6 +139,27 @@ clang-format -i src/**/*.{cpp,h}
 > instability from the reorder. `.claude/rules/architecture.md`, `dsp.md`, and `ui.md` updated to
 > match (Channel Routing diagrams, processBlock structure, LED/badge documentation).
 
+**v0.8.0 — Factory presets (2026-06-28; CMake `PROJECT_VERSION` bumped 0.7.0 → 0.8.0).** Five presets (Blues, High Gain, Rhythm Crunch,
+Edge-of-Breakup, Fuzz) exposed via JUCE's native programs API (`getNumPrograms`/
+`getCurrentProgram`/`setCurrentProgram`/`getProgramName` in `PluginProcessor.cpp`) — they show up
+in the host's own preset browser — confirmed for AU via `auval -v` ("HAS FACTORY PRESETS", all 5
+listed by name), and confirmed for VST3 by reading JUCE's wrapper source
+(`libs/JUCE/modules/juce_audio_plugin_client/juce_audio_plugin_client_VST3.cpp`): it bridges
+`getNumPrograms`/`getProgramName` straight into `IUnitInfo::getProgramListInfo`/`getProgramName`
+and a host-automatable `ProgramChangeParameter`, gated on `getNumPrograms() > 1` — no VST3-specific
+code needed, the same `Presets.h` data drives both formats. **No in-plugin preset UI was added, by
+design.** Preset data lives in `src/Presets.h`
+(`monarch::FactoryPreset`, `getFactoryPresets()`, `applyFactoryPreset()`) as plain APVTS
+parameter-ID → normalized-value pairs, applied via `setValueNotifyingHost`. Each preset sets
+`volume_red`/`volume_yellow` independently, `drive_*`/`tone_*`/`presence_*` identically on both
+channels (per spec — "channel A (Red) and B (yellow)" share Drive/Tone/Presence unless noted), and
+`clipping_mode_red`/`clipping_mode_yellow` per channel (Clean→Boost/OD→Overdrive/Distortion→
+Distortion). Knob values were specified on the traditional 0–10 pedal-dial scale and converted to
+the 0–1 APVTS range (÷10). Bypass/trim/supply-voltage/oversampling are untouched by presets.
+`tools/ControlSweep` re-run post-change: 0 non-finite, bounded, stable — presets don't touch the
+audio path so this is a no-regression check, not new DSP validation. **README Roadmap update
+(0.8 complete, 0.9 status) deferred** — user explicitly asked to fix it later.
+
 The full audio engine is done & validated (all stages, `MonarchChannel`, `processBlock`,
 oversampling — Step 7/8). **The UI is now complete:**
 - **Peripheral (shared-look):** `MonarchLookAndFeel` (palette + halo trim knob + main knurled

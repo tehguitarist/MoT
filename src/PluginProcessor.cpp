@@ -1,5 +1,6 @@
 #include "PluginProcessor.h"
 #include "PluginEditor.h"
+#include "Presets.h"
 
 MonarchAudioProcessor::MonarchAudioProcessor()
     : AudioProcessor (BusesProperties()
@@ -467,25 +468,36 @@ double MonarchAudioProcessor::getTailLengthSeconds() const
 
 int MonarchAudioProcessor::getNumPrograms()
 {
-    return 1;
+    return (int) monarch::getFactoryPresets().size();
 }
 
 int MonarchAudioProcessor::getCurrentProgram()
 {
-    return 0;
+    return currentProgramIndex;
 }
 
-void MonarchAudioProcessor::setCurrentProgram (int)
+void MonarchAudioProcessor::setCurrentProgram (int index)
 {
+    const auto& presets = monarch::getFactoryPresets();
+    if (index < 0 || index >= (int) presets.size())
+        return;
+
+    currentProgramIndex = index;
+    monarch::applyFactoryPreset (apvts, presets[(size_t) index]);
 }
 
-const juce::String MonarchAudioProcessor::getProgramName (int)
+const juce::String MonarchAudioProcessor::getProgramName (int index)
 {
-    return {};
+    const auto& presets = monarch::getFactoryPresets();
+    if (index < 0 || index >= (int) presets.size())
+        return {};
+
+    return presets[(size_t) index].name;
 }
 
 void MonarchAudioProcessor::changeProgramName (int, const juce::String&)
 {
+    // Factory presets are fixed — renaming is not supported.
 }
 
 void MonarchAudioProcessor::getStateInformation (juce::MemoryBlock& destData)
