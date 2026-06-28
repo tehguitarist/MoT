@@ -96,6 +96,7 @@ MonarchAudioProcessorEditor::MonarchAudioProcessorEditor (MonarchAudioProcessor&
     auto setupOSBox = [this] (ComboBox& box) {
         box.addItemList (kOsChoices, 1);
         box.setJustificationType (Justification::centred);
+        box.setColour (ComboBox::textColourId, Colour (MonarchLookAndFeel::cOSBtnActive));
         addAndMakeVisible (box);
     };
     setupOSBox (osRealtimeBox);

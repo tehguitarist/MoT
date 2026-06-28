@@ -144,13 +144,13 @@ juce::AudioProcessorValueTreeState::ParameterLayout MonarchAudioProcessor::creat
         juce::ParameterID { "oversampling_realtime", 1 },
         "Oversampling (Live)",
         oversamplingChoices,
-        2));
+        1));
 
     params.push_back (std::make_unique<juce::AudioParameterChoice> (
         juce::ParameterID { "oversampling_render", 1 },
         "Oversampling (Render)",
         oversamplingChoices,
-        3));
+        2));
 
     return { params.begin(), params.end() };
 }

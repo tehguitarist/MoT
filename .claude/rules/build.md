@@ -2,76 +2,11 @@
 
 ## CMake
 
-- CMake build system only — no Projucer
-- C++17 minimum standard
-- JUCE 8+ via CMake submodule or FetchContent
-- `chowdsp_wdf` as CMake submodule (header-only)
-- Targets: AU (primary), VST3 (secondary)
-- Author: Leigh Pierce | Company: Leigh Pierce
-
-## Project Structure
-
-```
-monarch-pedal/
-├── CMakeLists.txt
-├── CLAUDE.md
-├── .claude/
-│   ├── agents/
-│   │   ├── dsp-validator.md
-│   │   └── schematic-checker.md
-│   └── rules/
-│       ├── circuit.md
-│       ├── dsp.md
-│       ├── architecture.md
-│       ├── ui.md
-│       └── build.md
-├── src/
-│   ├── PluginProcessor.h / .cpp
-│   ├── PluginEditor.h / .cpp
-│   ├── dsp/
-│   │   ├── MonarchChannel.h         ← top-level single-channel DSP (instantiated twice)
-│   │   ├── Stage1.h                 ← IC_A non-inverting amp incl. input network (C3/R4/R5)
-│   │   │                              and feedback R-type at pin 2 (linear WDF)
-│   │   ├── Stage2.h                 ← IC_B inverting amp; R-type at pin 2 (linear WDF)
-│   │   ├── SW1SoftClip.h            ← MA856 back-to-back pairs (1x DiodePairT, n_eff=2n)
-│   │   │                              + R11, in parallel with R10 (nonlinear WDF)
-│   │   ├── SW2HardClip.h            ← 1S1588×2 true antiparallel shunt via R12 (nonlinear WDF)
-│   │   ├── ToneStage.h              ← TONE 3-terminal pot tap (R-type) + C8/R13/Trim/C9 (linear WDF)
-│   │   └── MonarchDSP.h             ← top-level dual-channel wrapper
-│   ├── ui/
-│   │   ├── MonarchLookAndFeel.h / .cpp
-│   │   ├── KnobComponent.h / .cpp
-│   │   ├── ClippingModeSelector.h / .cpp
-│   │   ├── ChannelPanel.h / .cpp    ← one channel's controls (Yellow & Red instances; no Hi Gain toggle)
-│   │   ├── VUMeter.h / .cpp
-│   │   └── LEDIndicator.h / .cpp
-│   └── utils/
-│       └── TaperUtils.h             ← audio taper for VOL; linear for DRIVE/TONE/Trim
-├── libs/
-│   ├── JUCE/
-│   └── chowdsp_wdf/
-└── tests/
-    ├── SmokeTest_RC.cpp
-    ├── Stage1_FreqResponse.cpp       ← input network + gain stage; validates peak GAIN
-    │                                    +13.88 dB, DC shelf, DRIVE monotonicity (peak freq
-    │                                    bilinear-warped — see dsp.md). PASS.
-    ├── Stage1_HiGain.cpp             ← verify +4 dB gain shift of Red's fixed Hi-Gain Stage 1 vs stock
-    ├── Stage2_Gain.cpp               ← DC gain = –22; HPF corner 159 Hz (C7=100nF)
-    ├── SW1SoftClip_Sine.cpp          ← MA856 symmetric soft clip; Vf ~0.82V onset
-    ├── SW2HardClip_Sine.cpp          ← 1S1588 symmetric hard clip; Vf ~0.584V onset
-    └── FullChain_DualChannel.cpp     ← both channels in series; all modes
-```
-
-## Build Commands
-
-```bash
-cmake -B build -DCMAKE_BUILD_TYPE=Release
-cmake --build build --target Monarch_AU
-cmake --build build --target Monarch_VST3
-cmake --build build
-```
-
-## Plugin Metadata
+- CMake only (no Projucer). C++17 minimum, `cmake_minimum_required(VERSION 3.15)`, macOS 10.13+.
+- JUCE 8+ and `chowdsp_wdf` (header-only) as submodules; xsimd optional (SIMD).
+- Targets: AU (primary, macOS only), VST3 (macOS/Windows/Linux), Standalone.
+- `-Wall -Wextra`, warnings-as-errors in CI. Vendored deps (chowdsp_wdf, xsimd) marked SYSTEM in
+  CMakeLists so their header warnings don't break `-Werror`. Our build is warning-clean.
 
 ```cmake
 juce_add_plugin(Monarch
@@ -79,124 +14,65 @@ juce_add_plugin(Monarch
     PLUGIN_MANUFACTURER_CODE LeP1
     PLUGIN_CODE Mon1
     FORMATS AU VST3
-    PRODUCT_NAME "Monarch of Tone"
-)
+    PRODUCT_NAME "Monarch of Tone")
 ```
 
-## Submodule Setup
+If xsimd is used, `add_subdirectory(libs/xsimd)` before chowdsp_wdf and
+`target_link_libraries(Monarch PRIVATE xsimd)`; `#include <xsimd/xsimd.hpp>` before
+`#include <chowdsp_wdf/chowdsp_wdf.h>`.
+
+## Build Commands
 
 ```bash
-git submodule add https://github.com/juce-framework/JUCE libs/JUCE
-git submodule add https://github.com/Chowdhury-DSP/chowdsp_wdf libs/chowdsp_wdf
-git submodule add https://github.com/xtensor-stack/xsimd libs/xsimd  # optional, SIMD accel
+git submodule update --init --recursive
+cmake -B build -DCMAKE_BUILD_TYPE=Release
+cmake --build build --target Monarch_AU         # or Monarch_VST3 / Monarch_Standalone / (all)
 ```
 
-If XSIMD included — add before chowdsp_wdf in CMakeLists.txt:
-```cmake
-add_subdirectory(libs/xsimd)
-target_link_libraries(Monarch PRIVATE xsimd)
+## Project Structure
+
 ```
-In DSP code: `#include <xsimd/xsimd.hpp>` BEFORE `#include <chowdsp_wdf/chowdsp_wdf.h>`
-
-## Compiler / Standard
-
-- `-std=c++17`
-- `cmake_minimum_required(VERSION 3.15)`
-- Target macOS 10.13+
-- Enable `-Wall -Wextra`; treat warnings as errors in CI
-- Vendored deps (chowdsp_wdf, xsimd) are marked SYSTEM in CMakeLists.txt
-  (`INTERFACE_SYSTEM_INCLUDE_DIRECTORIES`) so their header warnings (e.g. chowdsp's
-  `-Wshadow-field-in-constructor`) don't leak into our targets or break a `-Werror` CI gate.
-  JUCE already marks its own includes system. Our build is warning-clean.
+src/
+  PluginProcessor.{h,cpp}   AudioProcessor, APVTS layout, processBlock, presets, TiltShelf (off)
+  PluginEditor.{h,cpp}      Peripheral shell (trim/VU/oversampling strip), resizable window
+  Presets.h                 5 factory presets (native programs API)
+  dsp/  Stage1.h Stage2.h SW1SoftClip.h SW2HardClip.h ToneStage.h VolumePot.h
+        MonarchChannel.h     full single-channel chain (instantiated twice)
+  ui/   MonarchLookAndFeel.{h,cpp} PedalFace.{h,cpp} VUMeter.h LEDIndicator.h ClipSwitch.h
+        VoltageSelector.h Assets.h
+  utils/TaperUtils.h
+tests/   per-stage DSP validation programs (see Validation Gates)
+tools/   PedalRender, ControlSweep, UISnapshot, r_solver_sympy.py (R-type matrix solver), netlists/
+analysis/  NAM captures (local-only), test signal, Python validation suite (see README)
+libs/    JUCE, chowdsp_wdf, xsimd (submodules)
+```
 
 ## Code Style
 
-`.clang-format`:
-```yaml
-BasedOnStyle: LLVM
-IndentWidth: 4
-ColumnLimit: 120
-BreakBeforeBraces: Attach
-AllowShortFunctionsOnASingleLine: Inline
-SortIncludes: false
-```
-
-`.clang-tidy`:
-```yaml
-Checks: "clang-diagnostic-*,clang-analyzer-*,modernize-*,readability-*,-readability-magic-numbers"
-WarningsAsErrors: ""
-```
+`.clang-format`: LLVM base, IndentWidth 4, ColumnLimit 120, BreakBeforeBraces Attach,
+AllowShortFunctionsOnASingleLine Inline, SortIncludes false.
+`.clang-tidy`: `clang-diagnostic-*,clang-analyzer-*,modernize-*,readability-*,-readability-magic-numbers`.
 
 ## Validation Gates
 
-- Step 2: AU and VST3 scan and load in a DAW
-- Step 3: RC lowpass smoke test — correct -3dB point
-- Step 4a: Stage 1 frequency response — ✅ PASS (2026-06-17; re-measured 2026-06-19 after the
-  Yellow floor change). DC-servo shelf ≈ unity (−0.20 dB), peak +12.85 dB @ 4120 Hz (96k),
-  DRIVE +0.67→+17.60 dB monotonic. Accurate at base rate — no oversampling/prewarp needed for
-  the linear stages. An earlier ~−880 Hz error was an output-reconstruction bug (fixed:
-  reconstruct V(NodeG) from passive ports, not the source port — see dsp.md). **Yellow DRIVE
-  floor = 1k** (Theseus stock R2∥R3, nearly-clean min; matsumin labels R6=10k but we use 1k to
-  err cautious — decision 2026-06-19).
-- Step 4b: Stage 1 Hi Gain (fixed, Red only) — ✅ PASS (2026-06-18, dsp-validator). Topology
-  resolved (Theseus page-28: SW1B switches R3=1k ∥ R2=100k in the Stage-1 feedback floor →
-  raises Z_upper floor). Implemented as a single floor-resistance change, Red `HiGain_floor=39k`
-  vs Yellow `R6_floor=1k`. `tests/Stage1_HiGain.cpp`: hotter everywhere (+10.4→+2.3 dB over
-  Yellow's clean min), monotonic, Red@9:00=13.79 dB ≈ Yellow@noon=12.80 dB (+0.98 dB, "9-o'clock
-  acts like noon"). Not a runtime toggle. (Re-measured 2026-06-19 after Yellow floor → 1k; the
-  39k Red value was kept — still hits the noon target against the cleaner Yellow.)
-- Step 4c: Stage 2 — ✅ PASS (2026-06-17). Inverting passband gain 21.90× (−22 target,
-  R10/R9 = 220k/10k); HPF corner **159 Hz** exactly (C7=100nF, R9=10k); signed gain −21
-  (inverting). Inversion via op-amp VCVS terminals (no PolarityInverterT); output off passive
-  R10 port. `tests/Stage2_Gain.cpp`, dsp-validator PASS.
-- Step 5a: SW-1 soft-clip — ✅ PASS (2026-06-17). Small-signal −21.5 (inverting), PERFECTLY
-  symmetric clipping, soft knee with output ≈1.63V @ 0.5V in rising to 2.67V @ 2V in (soft,
-  not hard-clamped). The ~1.6V threshold (vs 0.82V single-diode) confirms n_eff≈3.024.
-  Current-source/diode-root formulation. `tests/SW1SoftClip_Sine.cpp`, dsp-validator PASS.
-- Step 5b: SW-2 hard-clip — ✅ PASS (2026-06-17). Gain ≈+1 (shunt, non-inverting), perfectly
-  symmetric, HARD clamp ±0.55V @ 1V in rising only to 0.66V @ 10V (diode-log; ~1.6 dB out per
-  20 dB in). 1S1588 true antiparallel via always-present R12=1k. `tests/SW2HardClip_Sine.cpp`,
-  dsp-validator PASS.
-- Step 6 (Tone stage): ✅ PASS (2026-06-18, dsp-validator). Passive TONE/Presence network
-  (circuit.md §11): TONE 3-terminal pot tap modelled as a 3-port WDF parallel adaptor at the
-  wiper (R_a series from the node_HC source; R_b+C8 to BIAS; R13 to node_T_out), Presence
-  Trim+C9 and the VOL pot body (100k) loading node_T_out. `tests/ToneStage_FreqResponse.cpp`:
-  treble-cut control (TONE↑ brightens, 5 kHz −27.7→−7.6 dB across the sweep), Presence reduces
-  the hi-cut (5 kHz −18.7→−8.7 dB), passband −2.1 dB, no NaN; DC divider matches analytic to
-  0.01 dB. **Contract for VolumePot/Step 7:** node_T_out already carries the VOL-body load — the
-  VolumePot stage models only the wiper audio-taper tap + C11/R14; do NOT re-load node_T_out.
-- Step 6 (per-channel modes): 3 clipping modes per channel (Boost/OD/Dist; "Both" dropped
-  2026-06-19 for the 3-way toggle) — Yellow on its stock Stage 1, Red on its fixed Hi-Gain
-  Stage 1. (Hi Gain is not a runtime axis — 3 modes × 2 fixed-voicing channels.)
-  **Boost mode must clip on the op-amp rails (≈±3.3V, soft knee) — not stay infinitely clean.**
-  Diode modes must clip at the diode thresholds (≈±1.64V / ≈±0.584V), proving the rail
-  saturation never engages there (tone-safe). See dsp.md "Op-amp Rail Saturation".
-- VolumePot: ✅ PASS (2026-06-18, dsp-validator). VOL 100kA AUDIO taper wiper tap
-  (pow(10,2x−2), scalar — node_T_out already carries the VOL-body load from ToneStage) + C11/R14
-  output HPF (0.16 Hz, passive WDF). `tests/VolumePot_Taper.cpp`: 0/−10/−20/−30/−40 dB exact,
-  passband flat, no NaN.
-- Step 7: Yellow → Red in series — ✅ PASS (2026-06-18, dsp-validator). `MonarchChannel` wires the
-  full chain (Stage1 → Stage2/SW1 → rail-sat → SW2 → Tone → Volume) with clipping-mode routing
-  (0..3 → SW1/SW2) and op-amp rail saturation (±3.3 V soft knee, linear below ±3.0 V). Rail-sat
-  is load-bearing in Boost (always) and Distortion (linear Stage2 ×−22 → ~13.9 V clamped before
-  the hard-clip shunt), tone-safe for the feedback soft-clip at normal drive.
-  `tests/FullChain_DualChannel.cpp`: clipping hierarchy Boost 2.76 > OD 1.41 > Dist 0.52 > Both
-  0.48 V (vin 0.3 Vpk, drive 0.7); Boost rail-bounded; Red hotter than Yellow; Yellow→Red series
-  finite/stable; no NaN. Accepted approximations (quantified negligible): SW-2-OFF drops R12=1k
-  (−0.08 dB flat), ideal voltage-out cascade. Remaining for Step 7/8: APVTS-driven processBlock
-  wiring (input/output trim calibration, bypass crossfade, meters) + oversampling.
-- Step 8: Oversampling — ✅ PASS (2026-06-18, dsp-validator + auval). Wraps ONLY the clip span
-  (`MonarchChannel::processClip`); linear stages stay at base rate so the OS factor changes
-  anti-aliasing only, never voicing (verified by construction — `prepareLinear` never re-called
-  on factor change, only `prepareClip` at base×2^log2). 1x/2x/4x/8x via oversampling_realtime/
-  _render (isNonRealtime → render), IIR low-latency live / FIR max-quality render, 2 oversamplers
-  (Yellow/Red, multi-channel), bypassed channels skip it, latency reported. Audio-thread rebuild
-  gated to only-on-change (accepted one-block gap). DSP regression tests still PASS after the
-  pre/clip/post split.
-- Step 9: Full control sweep both channels, no instability, clicks, or NaN
-- Step 10: Final full-range control sweep — ✅ PASS (2026-06-22). `tools/ControlSweep` (build target
-  `ControlSweep`) drives the full stereo processor through every control's full range × all 9 clip
-  combos, 4 OS factors (static + live change), bypass crossfades, instant knob jumps, and the 8x
-  render path: 0 non-finite, bounded (worst |out| 13.3), no steady-state instability; auval PASS.
-  Fixed the one zipper found (instantaneous VOLUME automation step) by smoothing VOLUME + input/
-  output TRIM (~5 ms); DRIVE/TONE/PRESENCE left unsmoothed (WDF elements, continuous turns clean).
+The DSP was built and validated stage-by-stage (run the `dsp-validator` agent after any DSP change;
+don't proceed on FAIL). All gates currently **PASS** (auval PASS). Each has a dedicated test in
+`tests/`:
+
+| Stage | Test | Key validated result |
+|-------|------|-----------------------|
+| RC smoke | `SmokeTest_RC` | −3 dB at the theoretical corner |
+| Stage 1 | `Stage1_FreqResponse` | peak gain +12.85 dB, DC shelf ≈unity, DRIVE monotonic; peak freq accurate at base rate |
+| Stage 1 Hi-Gain | `Stage1_HiGain` | Red hotter everywhere, monotonic, "9-o'clock ≈ noon" |
+| Stage 2 | `Stage2_Gain` | inverting −22 passband, HPF corner 159 Hz |
+| SW-1 soft | `SW1SoftClip_Sine` | symmetric soft clip, knee ≈1.64 V (confirms n_eff≈3.024) |
+| SW-2 hard | `SW2HardClip_Sine` | symmetric hard clamp ≈±0.55 V |
+| Tone | `ToneStage_FreqResponse` | treble-cut control, presence lifts hi-cut, DC divider exact |
+| Volume | `VolumePot_Taper` | audio taper 0/−10/−20/−30/−40 dB exact |
+| Full chain | `FullChain_DualChannel` | Boost>OD>Dist hierarchy, Boost rail-bounded, Red→Yellow series stable, no NaN |
+| Oversampling | (auval + DSP regression) | clip-span only; voicing OS-independent |
+| Final sweep | `tools/ControlSweep` | full range × all clip combos × 4 OS factors + bypass + render: 0 non-finite, bounded, stable |
+
+**Calibration / null validation** (Step 11, real-pedal A/B): see CLAUDE.md. The plugin nulls
+against 44 NAM captures at −7.6 to −21.7 dB (median −14.7). Harness: `analysis/null_test.py`,
+`run_validation.py` (writes `analysis/VALIDATION_REPORT.md`), `internal_checks.py`.

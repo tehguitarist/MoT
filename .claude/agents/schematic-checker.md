@@ -13,7 +13,7 @@ When invoked:
 1. Read `.claude/rules/circuit.md` in full
 2. Answer precisely from that document
 3. Give exact values — no paraphrasing that could lose precision
-4. If the document does not contain the answer: **"Not in circuit.md — re-examine `king_of_tone_schematic.png` before proceeding"**
+4. If the document does not contain the answer: **"Not in circuit.md — re-examine the schematics in `analysis/` (`KoT_schematic_matsumin`, `KoT_schematic_Theseus.png`) before proceeding"**
 5. Never approximate, substitute, or invent a value
 
 You have read-only access. Do not write code or modify files.
@@ -22,10 +22,13 @@ You have read-only access. Do not write code or modify files.
 
 **Topology:**
 - Stage 1 (IC_A): **non-inverting** amplifier. Signal at pin 3 (+). No PolarityInverterT.
-- Stage 2 (IC_B): **inverting** amplifier. Signal at pin 6 (–). PolarityInverterT IS required.
-- Stage 2 DC gain: –R10/R9 = –220k/10k = **–22** (matsumin refs: R10=220k feedback, R9=10k input)
-- DRIVE pot: 100kB linear — 2-terminal rheostat (R6+DRIVE) entirely inside Stage 1's
-  feedback network (Z_upper). No separate wiper tap to Stage 2; Stage 2 is unaffected by DRIVE.
+- Stage 2 (IC_B): **inverting** amplifier (passband gain −22). As implemented, inversion is carried
+  by the op-amp VCVS terminal assignment, **not** a separate `PolarityInverterT` (the gate is the
+  measured −22 signed gain).
+- Stage 2 DC gain: –R10/R9 = –220k/10k = **–22** (R10=220k feedback, R9=10k input)
+- DRIVE pot: 100kB linear — 2-terminal rheostat (floor+DRIVE) entirely inside Stage 1's feedback
+  network (Z_upper). Floor = R2∥R3 ≈ 990Ω (Yellow) / R2 = 100k (Red, Hi-Gain). No separate wiper
+  tap to Stage 2; Stage 2 is unaffected by DRIVE.
 
 **Clipping:**
 - SW-1 soft-clip: `[D4+D5]∥[D2+D3]` — two back-to-back 2-diode MA856 series strings,

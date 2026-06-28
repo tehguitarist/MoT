@@ -126,6 +126,17 @@ void MonarchLookAndFeel::drawButtonBackground (Graphics& g, Button& button, cons
         drawBypassFootswitch (g, button.getLocalBounds().toFloat(), isDown);
         return;
     }
+    if (button.getComponentID() == "scale")
+    {
+        // Match the OS selector boxes' fill/outline/corner radius exactly.
+        const auto bounds = button.getLocalBounds().toFloat();
+        const float corner = 4.0f;
+        g.setColour (isDown ? Colour (cOSBtnActiveBdr).withAlpha (0.4f) : bg);
+        g.fillRoundedRectangle (bounds, corner);
+        g.setColour (Colour (cOSBtnActiveBdr));
+        g.drawRoundedRectangle (bounds.reduced (0.5f), corner, 1.0f);
+        return;
+    }
     LookAndFeel_V4::drawButtonBackground (g, button, bg, highlighted, isDown);
 }
 
@@ -137,7 +148,7 @@ Font MonarchLookAndFeel::getTextButtonFont (TextButton&, int buttonHeight)
 void MonarchLookAndFeel::drawBypassFootswitch (Graphics& g, Rectangle<float> b, bool isButtonDown)
 {
     // isButtonDown is the momentary mouse-down state (not the bypass toggle state) — the
-    // down-image is a press animation only, per ui/ui-replacements.md.
+    // down-image is a press animation only — footswitch position doesn't indicate bypass state.
     const Image img = isButtonDown ? MonarchAssets::footswitchDownGraded() : MonarchAssets::footswitchUpGraded();
     if (! img.isValid())
         return;

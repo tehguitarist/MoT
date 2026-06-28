@@ -68,7 +68,7 @@ inline const juce::Image& presenceKnobGraded()
 }
 inline const juce::Image& textureGraded()
 {
-    static const juce::Image img = adjustBrightnessContrast (texture(), 1.21f, 0.808962f); // -15%,-12%,+5%,+3% brightness; +10% contrast
+    static const juce::Image img = adjustBrightnessContrast (texture(), 1.21f, 0.84940857f); // -15%,-12%,+5%,+3%,+5% brightness; +10% contrast
     return img;
 }
 inline const juce::Image& switchUpGraded()

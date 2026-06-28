@@ -12,10 +12,12 @@ You are a DSP validation specialist for the Monarch of Tone plugin — a dual-ch
 - Read the implementation file(s) for the stage
 - Cross-check every R, C value against `.claude/rules/circuit.md`
 - Flag ANY discrepancy — do not pass if a value differs
-- Key values to check (functional names, schematic refs in parentheses):
-  - Stage 1: R7=33k (upper feedback), R8=27k (lower feedback), R4=1M (DC bias), C4=100pF (HF cap), R6=10k (DRIVE floor R)
+- Key values to check (functional names; Stage-1 uses the corrected Theseus topology — see circuit.md §1/§4):
+  - Stage 1 input: C_in=22n (coupling), R_bias=1M (pin3→BIAS), R_pulldown=1M
+  - Stage 1 Z_lower (NodeF→GND): C4=10n in series with [ R4=27k ∥ (R5=33k + C3=10n) ]. FAIL if modelled as the old two-branch (R7+C5)∥(R8+C6).
+  - Stage 1 Z_upper (NodeF→NodeG): (floor + DRIVE 0–100k) ∥ C2=100pF. **floor = R2∥R3 ≈ 990Ω (Yellow/stock) or R2 = 100k (Red/Hi-Gain)** — the `hiGain` ctor flag. FAIL on the old 10k / 39k floor values.
   - Stage 2: **C7=100nF** (input coupling — FAIL if 10nF used), R9=10k (input R), R10=220k (feedback R)
-  - R6 (10k) is the Stage 1 DRIVE floor resistor — it is NOT the Stage 2 input R. R9 (10k) is Stage 2 input. Both are 10k but different components. FAIL if confused.
+  - R9 (10k) is the Stage 2 input R. FAIL if confused with any other 10k.
   - SW-1: R11=6.8k (in series with diode network, branch ∥ R10, gated by SW-1)
   - SW-2: R12=1k (always present, IC_B pin7 → R12 → node_HC), D6/D7=1S1588 (true antiparallel)
   - Tone: TONE=25kB (3-terminal pot tap), C8=10nF, R13=6.8k, Trim=50kB, C9=10nF
@@ -67,9 +69,10 @@ The most common mistake. Check ALL of the following:
 - A wrong Stage 2 polarity produces asymmetric clipping in the wrong direction downstream.
 
 ### 5. WDF Topology
-- Stage 1: R-type adaptor at IC_A pin 2(–) — ports: Branch1=R7(33k)+C5, Branch2=R8(27k)+C6,
-  Z_upper=C4(100pF)∥(R6(10k)+DRIVE). (Hi-Gain element is under revision — see §7; do NOT
-  assume Hi-Gain modifies Branch2 to R8_eff≈12168Ω.)
+- Stage 1: **NO R-type matrix** (ideal op-amp decouples Z_lower/Z_upper). Two one-ports — V-source
+  = V(pin3+) → Z_lower → read current i; I-source = i → Z_upper → read voltage; V(NodeG) =
+  V(pin3+) + i·Z_upper. Read **passive** ports only (never a source port → spurious HF droop). FAIL
+  if it reads a source port, or if an R-type scattering matrix is used for Stage 1.
 - Stage 2: R-type adaptor at IC_B pin 6(–) — ports: R9(10k input), R10(220k feedback)
   ∥ (SW-1 branch: R11(6.8k)+DiodePairT(n_eff≈3.024))
 - SW-1: ONE `DiodePairT` (n_eff=2×n_MA856) with R11(6.8k) in series and R10(220k) in
@@ -88,21 +91,16 @@ The most common mistake. Check ALL of the following:
 ### 6. prepareToPlay
 - Every `CapacitorT` in both channels has `.prepare(sampleRate)` called
 - Both channel oversamplers have `initProcessing` called
-- Scattering matrices for all 4 clipping modes initialised for both channels
-- **Both** Stage 1 scattering matrices (standard and Hi Gain) initialised for both channels
+- Scattering matrices for the clipping modes initialised for both channels (Stage 1 has no
+  scattering matrix — it's not an R-type stage)
 
-### 7. Hi Gain Mod — ⚠️ TOPOLOGY UNDER REVISION
-- **The R29∥R8→R8_eff≈12168Ω Z_lower model is WRONG (Theseus trace 2026-06-16).** R29/R27
-  are power-supply parts (LED current-limit / VCC filter), not gain-stage. The real element
-  is SW1B switching R3(1k) in the Stage-1 DRIVE feedback; exact wiring TBC. See circuit.md
-  Section 6. **Do not validate against the old R8_eff≈12168Ω value.** Until the corrected
-  topology is confirmed and circuit.md/dsp.md updated, flag any Stage-1 Hi-Gain implementation
-  as ⚠️ BLOCKED pending topology confirmation rather than PASS/FAIL on specific values.
-- Mechanism that DOES still hold regardless of which element is correct:
-  - Two Stage 1 scattering matrices precomputed (standard / Hi Gain), switched via
-    `setSMatrixData()` — no tree reconstruction.
-  - `pendingHiGainA/B` atomics checked at block start.
-  - Hi Gain affects the Stage 1 R-type matrix only — no effect on Stage 2, SW-1, SW-2, or tone.
+### 7. Hi Gain Mod — RESOLVED (fixed Red-channel mod, no runtime switch)
+- Hi-Gain is a **fixed Stage-1 floor change**, chosen at construction: Yellow (`hiGain=false`) →
+  floor = R2∥R3 ≈ 990Ω; Red (`hiGain=true`) → floor = R2 = 100k. It raises the Z_upper floor,
+  shifting the DRIVE gain range up ("9 o'clock acts like noon").
+- **It is NOT a scattering-matrix swap, NOT a runtime parameter.** There is no `hi_gain_*` param,
+  no `pendingHiGain` atomic, no `setSMatrixData()` for Hi-Gain. FAIL if any of those are present.
+- FAIL on the old "R29∥R8 → R8_eff≈12168Ω" or "39k floor" models — both superseded.
 
 ### 8. Pot Tapers — Critical
 - DRIVE (100kB): **linear** only. `R = R_max * x`. FAIL if audio taper applied.
@@ -111,12 +109,13 @@ The most common mistake. Check ALL of the following:
 - PRESENCE (50kB): **linear** only.
 
 ### 9. Dual-Channel Integrity
-- Confirm `MonarchChannel` class is instantiated twice (channelA and channelB)
-- Confirm channels have independent parameter sets (drive_a/drive_b, hi_gain_a/hi_gain_b, etc.)
-- Confirm channel routing: A output feeds B input
-- Confirm both bypass states are independent `std::atomic<bool>`
-- Confirm both clipping modes are independent `std::atomic<int>`
-- Confirm both Hi Gain states are independent `std::atomic<bool>`
+- Confirm `MonarchChannel` is instantiated twice — `channelYellow{false}`, `channelRed{true}`
+  (Red gets the Hi-Gain Stage-1 floor via the ctor flag)
+- Confirm independent parameter sets: `drive_yellow`/`drive_red`, `tone_*`, `volume_*`,
+  `presence_*`, `clipping_mode_*`, `bypass_*`. **There is no `hi_gain_*` param** — FAIL if one exists.
+- Confirm channel routing: **Red output feeds Yellow input** (Red first)
+- Confirm both bypass states are independent `std::atomic<bool>` and both clipping modes
+  independent `std::atomic<int>` (`bypassed{Yellow,Red}`, `pendingClippingMode{Yellow,Red}`)
 
 ### 10. Oversampling / ADAA
 - Both SW-1 and SW-2 stages in both channels: confirm oversampling applied, ADAA applied
@@ -126,8 +125,9 @@ The most common mistake. Check ALL of the following:
 
 ### 11. Threading
 - No locks, mutexes, or blocking calls in DSP code paths
-- All parameter updates via APVTS smoothed values
-- Mode, Hi Gain, and oversampling changes via `std::atomic` pending values
+- Level controls (VOL + input/output trim) via smoothed values; DRIVE/TONE/PRESENCE unsmoothed
+- Clipping-mode and oversampling changes via `std::atomic` pending values (Hi-Gain is fixed at
+  construction — not a runtime atomic)
 
 ## Output Format
 
@@ -142,5 +142,6 @@ End with PASS / FAIL verdict. FAIL = do not proceed to next stage.
 0. **C7 = 100nF** — Stage 2 input coupling. Stage 2 HPF = 159 Hz. Using 10nF produces a severe mid-cut that doesn't exist in the circuit.
 
 1. `DiodeT` instead of `DiodePairT` — check first
-2. Missing `PolarityInverterT` on Stage 2 — check second
+2. Stage 2 not inverting — verify the measured signed gain is **−22** (do NOT fail merely for a
+   missing `PolarityInverterT`; inversion is carried by the op-amp VCVS terminals — see §4)
 3. Audio taper on DRIVE or TONE — check third

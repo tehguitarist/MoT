@@ -256,7 +256,7 @@ void PedalFace::resized()
     // A/B badges, just outside each LED (away from the centre): Yellow's "B" sits left of its
     // LED, Red's "A" sits right of its LED.
     const float badgeD = ledBox * 0.85f;
-    const float badgeGap = ledBox * 0.62f;
+    const float badgeGap = ledBox * 0.85f; // a little further out from the LED (was 0.62)
     place (ledBadgeY, ledYx - badgeGap, ledCy, badgeD, badgeD);
     place (ledBadgeR, ledRx + badgeGap, ledCy, badgeD, badgeD);
 
