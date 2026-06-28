@@ -176,7 +176,7 @@ Unzip and copy the plugin bundle(s) to your system's plugin folder yourself:
   Standalone. macOS ships AU + VST3 + Standalone.
 - Diode-stage ADAA (as opposed to the rail-saturation ADAA already implemented) is deferred:
   the clipping stages are solved as WDF nonlinear *roots*, not memoryless waveshapers, and
-  `chowdsp_wdf` doesn't have ADAA support for that case. 8x oversampling on render is judged
+  `chowdsp_wdf` doesn't have ADAA support for that case. 4x oversampling on render is judged
   sufficient in the meantime.
 - A few device-physics-level residuals versus the real pedal (very-high-drive compression
   depth, some high-frequency content above the captures' own alias floor) are accepted as
