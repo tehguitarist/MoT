@@ -35,6 +35,9 @@ int main (int argc, char* argv[])
     const float vol = (float) String (argv[5]).getDoubleValue();
     const float pres = (float) String (argv[6]).getDoubleValue();
     const int clip = String (argv[7]).getIntValue();
+    // Optional: arg8 = "live" or "render" (default render); arg9 = OS factor index 0..3 (1x/2x/4x/8x).
+    const bool nonRealtime = (argc > 8) ? (String (argv[8]) != "live") : true;
+    const int osIndex = (argc > 9) ? String (argv[9]).getIntValue() : -1;
 
     AudioFormatManager fm;
     fm.registerBasicFormats();
@@ -60,10 +63,15 @@ int main (int argc, char* argv[])
     setParam (apvts, "bypass_red", 1.0f);   // Yellow only — Red passes dry
     setParam (apvts, "input_trim", 0.0f);
     setParam (apvts, "output_trim", 0.0f);
+    if (osIndex >= 0)
+    {
+        setParam (apvts, "oversampling_realtime", (float) osIndex);
+        setParam (apvts, "oversampling_render", (float) osIndex);
+    }
 
     constexpr int blockSize = 512;
     proc.setPlayConfigDetails (1, 1, fs, blockSize);
-    proc.setNonRealtime (true); // render path → render-quality (8x FIR) oversampling
+    proc.setNonRealtime (nonRealtime); // render → FIR (max quality); live → IIR (low latency)
     proc.prepareToPlay (fs, blockSize);
 
     MidiBuffer midi;
@@ -87,7 +95,8 @@ int main (int argc, char* argv[])
     writer->writeFromAudioSampleBuffer (buf, 0, numSamples);
     writer.reset();
 
-    std::printf ("rendered %s  (drive %.2f tone %.2f vol %.2f pres %.2f clip %d, %d smp @ %.0f Hz)\n",
-                 outFile.getFullPathName().toRawUTF8(), drive, tone, vol, pres, clip, numSamples, fs);
+    std::printf ("rendered %s  (drive %.2f tone %.2f vol %.2f pres %.2f clip %d, %s OS idx %d, %d smp @ %.0f Hz)\n",
+                 outFile.getFullPathName().toRawUTF8(), drive, tone, vol, pres, clip,
+                 nonRealtime ? "render" : "live", osIndex, numSamples, fs);
     return 0;
 }

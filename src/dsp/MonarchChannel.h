@@ -84,6 +84,31 @@ public:
     static constexpr double asymLowBoost = 0.0;   // Boost low-band (none — boost low notes ~clean)
     static constexpr double asymLowFc = 150.0;    // low-band low-pass corner (Hz) — taper to ~440 Hz
 
+    // ---- Drive-dependent capture-match voicing correction (two shelves, 2026-06-29) ----------
+    // A/B vs the NAM captures, measured as a best-fit-gain-aligned EQ error across 40 Hz–16 kHz
+    // at every gain/tone, showed the model-vs-pedal mismatch is a DRIVE-DEPENDENT TILT (a clean
+    // line in log-f; tone-independent): the plugin is treble-short at low drive and bass-short /
+    // treble-hot at high drive, crossing over near G4. A single fixed shelf can't fix a tilt that
+    // reverses sign with drive. Re-deriving the literal 3-terminal DRIVE wiper-tap topology proved
+    // the pot's dual action moves Stage 2's flat level, NOT Stage 1's tilt — so this is not in the
+    // linear topology; it's the same class of second-order / capture-chain effect as the (retired)
+    // TiltShelf and the even-harmonic injection, corrected empirically here. Two physically-keyed,
+    // drive-scaled first-order shelves on Stage 1's output (NodeG, base rate, pre-clip so the
+    // clipper sees the corrected spectrum), each fading to unity by the G4–G5 crossover:
+    //   • HIGH-SHELF, treble lift, fades OUT as drive rises — restores the Stage-1 HF shelf that
+    //     Av(s)=1+Z_upper/Z_lower lets collapse at low drive (the original "engaging it is dark").
+    //   • LOW-SHELF, bass lift, fades IN as drive rises — counters the documented
+    //     bass-bloom-under-drive the model under-does (real pedal blooms low end as it compresses).
+    // 16 kHz stays ~3.8 dB off at every setting: that's the captures' own bandwidth/alias limit
+    // (CLAUDE.md — the plugin's 8×-anti-aliased top is the more-correct version), NOT corrected.
+    static constexpr double shelfPivotHz = 450.0; // treble high-shelf geometric centre (Hz)
+    static constexpr double shelfMaxDb = 5.6;     // HF lift at drive 0 (fades to 0 by ~drive 0.47)
+    static constexpr double shelfSlopeDb = 11.8;  // dB of HF lift lost per unit drive
+    static constexpr double bassPivotHz = 105.0;  // bass low-shelf geometric centre (Hz)
+    static constexpr double bassOnsetDrive = 0.25;// bass lift starts engaging above this drive
+    static constexpr double bassSlopeDb = 7.5;    // dB of LF lift gained per unit drive past onset
+    static constexpr double bassMaxDb = 4.2;      // cap on the LF lift
+
     explicit MonarchChannel (bool hiGain = false) : stage1 (hiGain), hiGainStage1 (hiGain) {}
 
     // The linear stages run at the base rate; the nonlinear clip span (Stage2/SW1 + rail-sat
@@ -95,6 +120,9 @@ public:
         stage1.prepare (baseRate);
         tone.prepare (baseRate);
         volume.prepare (baseRate);
+        shBaseRate = baseRate;
+        updateDriveShelf (0.5); // default = unity pass-through until setDrive() runs
+        hsX1 = hsY1 = lsX1 = lsY1 = 0.0;
     }
 
     void prepareClip (double clipRate)
@@ -129,10 +157,15 @@ public:
         volume.reset();
         railXprev = 0.0;
         railFprev = 0.0;
+        hsX1 = hsY1 = lsX1 = lsY1 = 0.0;
     }
 
     // ---- Parameter setters (call per block; tapers applied inside each stage) ----
-    void setDrive (double d) { stage1.setDrive (d); }
+    void setDrive (double d)
+    {
+        stage1.setDrive (d);
+        updateDriveShelf (d); // drive-dependent Stage-1 voicing correction (see shelf* consts)
+    }
     void setTone (double t) { tone.setTone (t); }
     void setPresence (double p) { tone.setPresence (p); }
     void setVolume (double v) { volume.setVolume (v); }
@@ -160,8 +193,9 @@ public:
         sw2On = (mode == 2);
     }
 
-    // Base-rate front: input network + Stage 1 → V(NodeG).
-    inline double processPre (double x) noexcept { return stage1.processSample (x); }
+    // Base-rate front: input network + Stage 1 → V(NodeG), then the drive-dependent voicing
+    // correction (high-shelf; unity pass-through once drive ≳ 0.47, see shelf* consts).
+    inline double processPre (double x) noexcept { return driveShelf (stage1.processSample (x)); }
 
     // Oversampled nonlinear span: Stage2 (or SW1 soft clip) → op-amp rail-sat → SW2 (or pass)
     // → V(node_HC). This is the ONLY part that should run at the oversampled rate.
@@ -238,6 +272,44 @@ private:
         return y;
     }
 
+    // First-order shelf coeffs (bilinear, prewarped — mirrors TiltShelf). `glo`/`ghi` are the
+    // LF/HF linear-gain asymptotes, `pivot` the geometric centre. ghi=glo → exact unity passthrough.
+    // Writes b0/b1/a1. A high-shelf sets glo=1; a low-shelf sets ghi=1.
+    void shelfCoeffs (double glo, double ghi, double pivot, double& b0, double& b1, double& a1) const noexcept
+    {
+        const double rt = std::sqrt (ghi / glo);
+        const double fz = pivot / rt; // zero
+        const double fp = pivot * rt; // pole
+        const double K = 2.0 * shBaseRate;
+        const double wz = K * std::tan (M_PI * fz / shBaseRate);
+        const double wp = K * std::tan (M_PI * fp / shBaseRate);
+        const double a0 = K + wp;
+        a1 = (wp - K) / a0;
+        b0 = ghi * (K + wz) / a0;
+        b1 = ghi * (wz - K) / a0;
+    }
+
+    // Drive-dependent capture-match correction (see shelf*/bass* consts): a treble HIGH-SHELF that
+    // fades OUT with drive + a bass LOW-SHELF that fades IN with drive, both on Stage 1's output.
+    void updateDriveShelf (double drive01) noexcept
+    {
+        const double trebleDb = std::max (0.0, shelfMaxDb - shelfSlopeDb * drive01);          // HF lift
+        const double bassDb = std::min (bassMaxDb, std::max (0.0, bassSlopeDb * (drive01 - bassOnsetDrive)));
+        shelfCoeffs (1.0, std::pow (10.0, trebleDb / 20.0), shelfPivotHz, hsB0, hsB1, hsA1);  // high-shelf
+        shelfCoeffs (std::pow (10.0, bassDb / 20.0), 1.0, bassPivotHz, lsB0, lsB1, lsA1);     // low-shelf
+    }
+
+    inline double driveShelf (double x) noexcept
+    {
+        const double t = hsB0 * x + hsB1 * hsX1 - hsA1 * hsY1; // treble high-shelf
+        hsX1 = x;
+        hsY1 = t;
+        const double y = lsB0 * t + lsB1 * lsX1 - lsA1 * lsY1; // bass low-shelf
+        lsX1 = t;
+        lsY1 = y;
+        return y;
+    }
+
     // Even-harmonic injection at the clip output (see the asym* constants). `x` = clip output
     // (node_HC), `nodeG` = clip-span input (drive level). A clipping-depth envelope gates/scales
     // the H2 so clean playing stays symmetric and the level-trend matches the captures.
@@ -284,6 +356,11 @@ private:
     double railKnee { railV9V - railKneeMargin };   // soft-knee onset (V); set by setSupplyVoltage
     double railXprev { 0.0 };                       // ADAA state: previous rail-sat input
     double railFprev { 0.0 };                       // ADAA state: F(railXprev) (F(0)=0)
+
+    // Drive-dependent Stage-1 voicing correction: treble high-shelf (hs*) + bass low-shelf (ls*).
+    double shBaseRate { 48000.0 };
+    double hsB0 { 1.0 }, hsB1 { 0.0 }, hsA1 { 0.0 }, hsX1 { 0.0 }, hsY1 { 0.0 };
+    double lsB0 { 1.0 }, lsB1 { 0.0 }, lsA1 { 0.0 }, lsX1 { 0.0 }, lsY1 { 0.0 };
 
     double clipEnv { 0.0 };   // clipping-depth envelope (gates the even-harmonic coeff)
     double meanSq { 0.0 };    // slow ⟨soft²⟩ (removes only DC from the H2 injection)

@@ -96,14 +96,31 @@ reproduce.
   lighter segments. Knob calibration confirmed correct.
 - **Capture-match tilt shelf** (`TiltShelf`, an artificial fixed high-shelf): retired
   (`kEnabled=false`) once the corrected Stage-1 Z_lower topology reproduced the EQ tilt
-  circuit-accurately. Code kept for A/B only.
+  circuit-accurately. Code kept for A/B only. (Superseded by the drive-dependent two-shelf
+  correction below — a *fixed* shelf cannot fix a tilt that reverses sign with drive.)
+- **Literal 3-terminal DRIVE wiper-tap as the cause of the low-drive EQ collapse** (2026-06-29):
+  re-derived the full wiper-tap transfer function (pin1→R2→NodeF, wiper=NodeG, pin3→R6→C5→Stage2)
+  numerically — it has the *same* drive-dependence of the Stage-1 tilt as the 2-terminal model
+  (the pot's dual action moves Stage 2's flat *level*, not Stage 1's *tilt*). So the real pedal's
+  drive-INDEPENDENT clean EQ is not explainable by the linear topology; corrected empirically (below).
+
+### Drive-dependent two-shelf capture-match correction (`MonarchChannel`, 2026-06-29)
+Best-fit-gain-aligned EQ error (plugin vs captures, 40 Hz–16 kHz, every gain/tone) is a clean,
+tone-independent **tilt that reverses with drive**: treble-short at low drive, bass-short/treble-hot
+at high drive, crossing near G4. Corrected with two drive-scaled first-order shelves on Stage 1's
+output (pre-clip, base rate): a **treble high-shelf** fading OUT with drive (restores the Stage-1 HF
+shelf `Av=1+Z_upper/Z_lower` lets collapse at low drive — the "engaging it is dark" complaint) and a
+**bass low-shelf** fading IN with drive (counters the bass-bloom-under-drive). Result: **50 Hz–10 kHz
+within ~1.1 dB at all gain/tone** (RMS 0.3–0.7), worst ~1.7 dB at two clip-/tone-extreme corners.
+Also *improves* OD/Dist nulls at mid/high drive (G5 OD −18.4→−23.7, G5 Dist −14.9→−19.1). 12.5–16 kHz
+left uncorrected (capture bandwidth/alias limit; the plugin's anti-aliased top is the more-correct one).
 
 ### Accepted residuals (un-modeled second-order device physics, per user pref for circuit accuracy)
 - OD compresses ~3–4 dB lighter than the real pedal at hot input (Distortion compression good, Δ~2 dB).
-- High-drive (G8–G10) gain rises ~2–3 dB more on the real pedal, with a bass-bloom-under-drive the
-  model has but under-drives (boosting the plugin input reproduces it exactly).
 - A small genuine HF-harmonic difference >8 kHz (tone-stage rolloff); and the captures' own 4–6 kHz
-  energy is partly NAM aliasing (the plugin's 8× anti-aliased clip is the more-correct version).
+  energy is partly NAM aliasing (the plugin's 8× anti-aliased clip is the more-correct version). The
+  captures roll off hard ≥12.5 kHz (−3.8 dB at 16 kHz at every setting) — a capture bandwidth limit,
+  deliberately NOT EQ-matched.
 - Per-mode capture levels are **normalized** (Boost/OD/Dist sit at the same level, physically
   impossible at fixed volume) — A/B and null tests must re-gain per mode. The plugin's
   Boost>OD>Dist hierarchy is physically correct (diode-clamp ratios).

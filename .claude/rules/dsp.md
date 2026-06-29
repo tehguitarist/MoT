@@ -161,9 +161,28 @@ clip-depth-gated (clean stays symmetric) and DC-free (slow running-mean removal)
 - Per-mode coefficients (`asymOD/Dist/Boost`, `asymLowOD/Dist/Boost`). Empirical model of the
   coupling-cap blocking-distortion device physics, not a circuit element.
 
-The artificial **capture-match tilt shelf** (`TiltShelf`, PluginProcessor.h) is **retired**
-(`kEnabled = false`) — the corrected Stage-1 voicing reproduces the EQ tilt it was faking. Code
-kept for A/B only.
+The fixed processor-level **capture-match tilt shelf** (`TiltShelf`, PluginProcessor.h) is
+**retired** (`kEnabled = false`) and superseded by the drive-dependent correction below — a fixed
+shelf cannot match a tilt that reverses sign with drive. Code kept for A/B only.
+
+## Drive-dependent capture-match shelves (`MonarchChannel::updateDriveShelf` / `driveShelf`)
+
+The model-vs-capture EQ error (best-fit-gain-aligned, 40 Hz–16 kHz, every gain/tone) is a clean,
+**tone-independent tilt that reverses with drive**: treble-short at low drive, bass-short/treble-hot
+at high drive, crossing near G4. (The literal 3-terminal DRIVE wiper-tap was re-derived and shown to
+share the 2-terminal model's drive-dependence — the pot's dual action moves Stage 2's flat level,
+not Stage 1's tilt — so this is a second-order/capture-chain effect, not a topology fix.) Corrected
+with **two drive-scaled first-order shelves on Stage 1's output** (`processPre`, base rate, pre-clip
+so the clipper sees the corrected spectrum), each unity by the G4–G5 crossover:
+- **Treble high-shelf** (`shelfPivotHz` 450, `shelfMaxDb`/`shelfSlopeDb`): HF lift that fades OUT
+  with drive — restores the Stage-1 HF shelf `Av=1+Z_upper/Z_lower` lets collapse at low drive.
+- **Bass low-shelf** (`bassPivotHz` 105, `bassOnsetDrive`/`bassSlopeDb`/`bassMaxDb`): LF lift that
+  fades IN with drive — counters the documented bass-bloom-under-drive.
+
+Both use the prewarped bilinear `shelfCoeffs` helper (a high-shelf sets Glo=1; a low-shelf sets
+Ghi=1; Glo=Ghi → exact unity). Result: 50 Hz–10 kHz within ~1.1 dB at all gain/tone (RMS 0.3–0.7);
+also *improves* OD/Dist nulls at mid/high drive. 12.5–16 kHz left uncorrected (capture bandwidth
+limit). State (`hs*`/`ls*`) resets in `prepareLinear`/`reset`; coeffs update per block in `setDrive`.
 
 ---
 
