@@ -78,7 +78,7 @@ inline const std::vector<FactoryPreset>& getFactoryPresets()
           { { "volume_red", dial (9) }, { "volume_yellow", dial (9) },
             { "drive_red", dial (9) }, { "drive_yellow", dial (9) },
             { "tone_red", dial (2) }, { "tone_yellow", dial (2) },
-            { "presence_red", dial (2) }, { "presence_yellow", dial (2) },
+            { "presence_red", dial (0) }, { "presence_yellow", dial (0) },
             { "clipping_mode_red", kClipDistortion }, { "clipping_mode_yellow", kClipDistortion } } },
     };
     return presets;

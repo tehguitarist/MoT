@@ -14,10 +14,12 @@ name: Release
 # Each platform also gets a basic installer built from installer/<platform>/ alongside the raw
 # zip: a .pkg on macOS (AU/VST3 choice screen, both selected by default), a .exe on Windows
 # (NSIS, VST3 only), and a .deb on Linux (VST3 only). The macOS .pkg wraps the already-signed-
-# and-notarized AU/VST3 bundles, but the .pkg installer itself is NOT signed (that needs a
-# separate "Developer ID Installer" cert, not provisioned here) — Gatekeeper checks the bundles
-# when a host loads them, not the installer wrapper, so this is fine for distribution, though
-# double-clicking the .pkg directly may show an "unidentified developer" prompt.
+# and-notarized AU/VST3 bundles. The .pkg installer wrapper itself needs a separate "Developer
+# ID Installer" certificate (a different cert type from the Application one above) — once its
+# identity is set via the APPLE_INSTALLER_SIGNING_IDENTITY secret, the cert must also be present
+# in the same APPLE_CERT_P12_BASE64 keychain import (re-export that .p12 from Keychain Access
+# with both the Application and Installer certs selected). Until that secret is set, the .pkg
+# ships unsigned/unnotarized with a warning, same as the unsigned-app-bundle fallback above.
 
 on:
   workflow_dispatch:
@@ -48,6 +50,7 @@ jobs:
     env:
       VERSION: ${{ needs.prepare.outputs.version }}
       HAS_APPLE_SIGNING: ${{ secrets.APPLE_CERT_P12_BASE64 != '' }}
+      HAS_INSTALLER_SIGNING: ${{ secrets.APPLE_INSTALLER_SIGNING_IDENTITY != '' }}
     steps:
       - uses: actions/checkout@v7
         with:
@@ -138,6 +141,32 @@ jobs:
 
       - name: Build installer
         run: installer/macos/build_installer.sh "$VERSION" build/Monarch_artefacts/Release dist
+
+      - name: Sign installer
+        if: ${{ env.HAS_INSTALLER_SIGNING == 'true' }}
+        env:
+          APPLE_INSTALLER_SIGNING_IDENTITY: ${{ secrets.APPLE_INSTALLER_SIGNING_IDENTITY }}
+        run: |
+          PKG="dist/Monarch-of-Tone-${VERSION}-macOS-Installer.pkg"
+          productsign --sign "$APPLE_INSTALLER_SIGNING_IDENTITY" "$PKG" "$RUNNER_TEMP/signed.pkg"
+          mv "$RUNNER_TEMP/signed.pkg" "$PKG"
+          pkgutil --check-signature "$PKG"
+
+      - name: Notarize and staple installer
+        if: ${{ env.HAS_APPLE_SIGNING == 'true' && env.HAS_INSTALLER_SIGNING == 'true' }}
+        env:
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
+        run: |
+          PKG="dist/Monarch-of-Tone-${VERSION}-macOS-Installer.pkg"
+          xcrun notarytool submit "$PKG" \
+            --apple-id "$APPLE_ID" --team-id "$APPLE_TEAM_ID" --password "$APPLE_APP_SPECIFIC_PASSWORD" --wait
+          xcrun stapler staple "$PKG"
+
+      - name: Note unsigned installer
+        if: ${{ env.HAS_INSTALLER_SIGNING != 'true' }}
+        run: echo "::warning::macOS .pkg installer is unsigned (APPLE_INSTALLER_SIGNING_IDENTITY not set) — see README 'Releasing' for the secret needed to sign/notarize it."
 
       - name: Clean up keychain
         if: always()

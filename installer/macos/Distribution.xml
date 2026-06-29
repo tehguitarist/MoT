@@ -6,7 +6,9 @@
     <options customize="allow" require-scripts="false" rootVolumeOnly="true"/>
 
     <!-- Two installable components, both selected by default. AU is macOS-only, so this is the
-         one platform where a plugin-format choice screen makes sense. -->
+         one platform where a plugin-format choice screen makes sense. The "default" outline node
+         is just a grouping container (not itself a pkg-ref), so it's flagged visible="false" —
+         otherwise Customize shows it as an extra parent row with a blank title above AU/VST3. -->
     <choices-outline>
         <line choice="default">
             <line choice="au"/>
@@ -14,7 +16,7 @@
         </line>
     </choices-outline>
 
-    <choice id="default"/>
+    <choice id="default" visible="false"/>
 
     <choice id="au"
             title="Audio Unit (AU)"

@@ -164,11 +164,9 @@ Unzip and copy the plugin bundle(s) to your system's plugin folder yourself:
 - **Windows:** `Monarch of Tone.vst3` → `C:\Program Files\Common Files\VST3\`.
 - **Linux:** `Monarch of Tone.vst3` → `~/.vst3/` (or `/usr/lib/vst3/` for all users).
 
-> **macOS signing:** release artifacts are signed with a Developer ID certificate and notarized by
-> Apple — no Gatekeeper warning on first launch for the AU/VST3 bundles themselves. The `.pkg`
-> installer wrapper is not separately signed, so macOS may still show an "unidentified developer"
-> prompt when you double-click the `.pkg` directly (right-click → Open, or allow it once in System
-> Settings → Privacy & Security) — this doesn't affect the plugin bundles it installs.
+> **macOS signing:** release artifacts, including the `.pkg` installer wrapper itself, are signed
+> with a Developer ID certificate and notarized by Apple — no Gatekeeper warning on first launch
+> or when double-clicking the `.pkg` directly.
 
 ## Known limitations
 
