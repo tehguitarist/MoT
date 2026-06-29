@@ -14,12 +14,12 @@ name: Release
 # Each platform also gets a basic installer built from installer/<platform>/ alongside the raw
 # zip: a .pkg on macOS (AU/VST3 choice screen, both selected by default), a .exe on Windows
 # (NSIS, VST3 only), and a .deb on Linux (VST3 only). The macOS .pkg wraps the already-signed-
-# and-notarized AU/VST3 bundles. The .pkg installer wrapper itself needs a separate "Developer
-# ID Installer" certificate (a different cert type from the Application one above) — once its
-# identity is set via the APPLE_INSTALLER_SIGNING_IDENTITY secret, the cert must also be present
-# in the same APPLE_CERT_P12_BASE64 keychain import (re-export that .p12 from Keychain Access
-# with both the Application and Installer certs selected). Until that secret is set, the .pkg
-# ships unsigned/unnotarized with a warning, same as the unsigned-app-bundle fallback above.
+# and-notarized AU/VST3 bundles. The .pkg installer wrapper itself is signed with a separate
+# "Developer ID Installer" certificate (a different cert type from the Application one above),
+# supplied via its own three secrets: APPLE_INSTALLER_CERT_P12_BASE64, APPLE_INSTALLER_CERT_PASSWORD,
+# and APPLE_INSTALLER_SIGNING_IDENTITY. When set, that cert is imported into the same keychain and
+# the .pkg is productsign'd, then notarized/stapled (reusing APPLE_ID/TEAM_ID/APP_SPECIFIC_PASSWORD).
+# Until those are set, the .pkg ships unsigned/unnotarized with a warning, same as the app fallback.
 
 on:
   workflow_dispatch:
@@ -50,7 +50,7 @@ jobs:
     env:
       VERSION: ${{ needs.prepare.outputs.version }}
       HAS_APPLE_SIGNING: ${{ secrets.APPLE_CERT_P12_BASE64 != '' }}
-      HAS_INSTALLER_SIGNING: ${{ secrets.APPLE_INSTALLER_SIGNING_IDENTITY != '' }}
+      HAS_INSTALLER_SIGNING: ${{ secrets.APPLE_INSTALLER_CERT_P12_BASE64 != '' && secrets.APPLE_INSTALLER_SIGNING_IDENTITY != '' }}
     steps:
       - uses: actions/checkout@v7
         with:
@@ -71,24 +71,37 @@ jobs:
           echo "vst3=$vst3" >> "$GITHUB_OUTPUT"
 
       # ---- Apple code signing + notarization — enabled once the 6 secrets below are set. ----
-      - name: Import Developer ID certificate
+      - name: Import Developer ID certificate(s)
         if: ${{ env.HAS_APPLE_SIGNING == 'true' }}
         env:
           APPLE_CERT_P12_BASE64: ${{ secrets.APPLE_CERT_P12_BASE64 }}
           APPLE_CERT_PASSWORD: ${{ secrets.APPLE_CERT_PASSWORD }}
+          APPLE_INSTALLER_CERT_P12_BASE64: ${{ secrets.APPLE_INSTALLER_CERT_P12_BASE64 }}
+          APPLE_INSTALLER_CERT_PASSWORD: ${{ secrets.APPLE_INSTALLER_CERT_PASSWORD }}
         run: |
           KEYCHAIN_PATH="$RUNNER_TEMP/signing.keychain-db"
           KEYCHAIN_PASS=$(uuidgen)
-          echo "$APPLE_CERT_P12_BASE64" | base64 --decode > "$RUNNER_TEMP/cert.p12"
 
           security create-keychain -p "$KEYCHAIN_PASS" "$KEYCHAIN_PATH"
           security set-keychain-settings -lut 21600 "$KEYCHAIN_PATH"
           security unlock-keychain -p "$KEYCHAIN_PASS" "$KEYCHAIN_PATH"
+
+          # Developer ID Application cert (signs the AU/VST3 bundles via codesign).
+          echo "$APPLE_CERT_P12_BASE64" | base64 --decode > "$RUNNER_TEMP/cert.p12"
           security import "$RUNNER_TEMP/cert.p12" -k "$KEYCHAIN_PATH" -P "$APPLE_CERT_PASSWORD" \
             -T /usr/bin/codesign -T /usr/bin/security
-          security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$KEYCHAIN_PASS" "$KEYCHAIN_PATH"
-          security list-keychain -d user -s "$KEYCHAIN_PATH" $(security list-keychains -d user | sed 's/"//g')
           rm -f "$RUNNER_TEMP/cert.p12"
+
+          # Developer ID Installer cert (signs the .pkg via productsign) — separate cert/secret.
+          if [ -n "$APPLE_INSTALLER_CERT_P12_BASE64" ]; then
+            echo "$APPLE_INSTALLER_CERT_P12_BASE64" | base64 --decode > "$RUNNER_TEMP/installer-cert.p12"
+            security import "$RUNNER_TEMP/installer-cert.p12" -k "$KEYCHAIN_PATH" -P "$APPLE_INSTALLER_CERT_PASSWORD" \
+              -T /usr/bin/productsign -T /usr/bin/productbuild -T /usr/bin/security
+            rm -f "$RUNNER_TEMP/installer-cert.p12"
+          fi
+
+          security set-key-partition-list -S apple-tool:,apple:,codesign:,productsign: -s -k "$KEYCHAIN_PASS" "$KEYCHAIN_PATH"
+          security list-keychain -d user -s "$KEYCHAIN_PATH" $(security list-keychains -d user | sed 's/"//g')
           echo "KEYCHAIN_PATH=$KEYCHAIN_PATH" >> "$GITHUB_ENV"
 
       - name: Codesign AU + VST3
